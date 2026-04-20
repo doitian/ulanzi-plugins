@@ -1,0 +1,20 @@
+{
+  "Name": "Clash 流量",
+  "Description": "在按键上以折线图实时显示 Clash 上下行流量。",
+  "Actions": [
+    {
+      "Name": "流量",
+      "Tooltip": "显示 Clash 上下行流量图"
+    }
+  ],
+  "Localization": {
+    "WebSocket URL": "WebSocket 地址",
+    "API Token": "API 令牌",
+    "Refresh Interval (s)": "刷新间隔（秒）",
+    "How often the chart samples and redraws. Intermediate frames are averaged.": "图表采样并重绘的频率。期间收到的数据会被平均。",
+    "Online Press Action": "在线时按键动作",
+    "Offline Press Action": "离线时按键动作",
+    "URL or local path to open when key is pressed while connected.": "连接成功时按键打开的 URL 或本地路径。",
+    "URL or local path to open when key is pressed while service is offline.": "服务离线时按键打开的 URL 或本地路径。"
+  }
+}

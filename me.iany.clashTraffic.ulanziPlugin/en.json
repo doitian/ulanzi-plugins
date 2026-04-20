@@ -1,0 +1,20 @@
+{
+  "Name": "Clash Traffic",
+  "Description": "Show real-time Clash up/down traffic as a line chart on a key.",
+  "Actions": [
+    {
+      "Name": "Traffic",
+      "Tooltip": "Show Clash up/down traffic chart"
+    }
+  ],
+  "Localization": {
+    "WebSocket URL": "WebSocket URL",
+    "API Token": "API Token",
+    "Refresh Interval (s)": "Refresh Interval (s)",
+    "How often the chart samples and redraws. Intermediate frames are averaged.": "How often the chart samples and redraws. Intermediate frames are averaged.",
+    "Online Press Action": "Online Press Action",
+    "Offline Press Action": "Offline Press Action",
+    "URL or local path to open when key is pressed while connected.": "URL or local path to open when key is pressed while connected.",
+    "URL or local path to open when key is pressed while service is offline.": "URL or local path to open when key is pressed while service is offline."
+  }
+}

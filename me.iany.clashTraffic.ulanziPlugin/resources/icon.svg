@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 144" width="144" height="144">
+  <rect width="144" height="144" rx="20" fill="#1e1f22"/>
+  <!-- Up arrow (green) -->
+  <g transform="translate(36 36)">
+    <path d="M18 0 L36 18 L26 18 L26 36 L10 36 L10 18 L0 18 Z" fill="#4caf50"/>
+  </g>
+  <!-- Down arrow (blue) -->
+  <g transform="translate(72 72)">
+    <path d="M18 36 L0 18 L10 18 L10 0 L26 0 L26 18 L36 18 Z" fill="#2196f3"/>
+  </g>
+</svg>

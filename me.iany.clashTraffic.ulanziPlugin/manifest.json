@@ -1,0 +1,38 @@
+{
+  "Author": "iany",
+  "Name": "Clash Traffic",
+  "Description": "Show real-time Clash up/down traffic as a line chart on a key.",
+  "Icon": "resources/icon.svg",
+  "Version": "1.0.0",
+  "Category": "Clash Traffic",
+  "CategoryIcon": "resources/icon.svg",
+  "CodePath": "plugin/app.html",
+  "Type": "JavaScript",
+  "PrivateAPI": true,
+  "UUID": "me.iany.ulanzistudio.clashTraffic",
+  "Actions": [
+    {
+      "Name": "Traffic",
+      "Icon": "resources/actionIcon.svg",
+      "PropertyInspectorPath": "property-inspector/traffic/inspector.html",
+      "state": 0,
+      "States": [
+        { "Name": "Connected", "Image": "resources/actionIcon.svg" },
+        { "Name": "Disconnected", "Image": "resources/offline.svg" }
+      ],
+      "Tooltip": "Show Clash up/down traffic chart",
+      "UUID": "me.iany.ulanzistudio.clashTraffic.traffic",
+      "SupportedInMultiActions": false,
+      "DisableAutomaticStates": true,
+      "Controllers": ["Keypad"],
+      "Devices": []
+    }
+  ],
+  "OS": [
+    { "Platform": "windows", "MinimumVersion": "10" },
+    { "Platform": "mac", "MinimumVersion": "10.11" }
+  ],
+  "Software": {
+    "MinVersion": "2.1.0"
+  }
+}

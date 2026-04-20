@@ -1,0 +1,16 @@
+[vars]
+plugins_dir = '{{env.APPDATA}}\Ulanzi\UlanziDeck\Plugins'
+
+[tasks."install:clashTraffic"]
+description = "Install me.iany.clashTraffic.ulanziPlugin into UlanziDeck Plugins folder"
+shell = "pwsh -NoProfile -Command"
+run = '''
+$dst = Join-Path '{{vars.plugins_dir}}' 'me.iany.clashTraffic.ulanziPlugin'
+if (Test-Path $dst) { Remove-Item -Recurse -Force $dst }
+New-Item -ItemType Directory -Force -Path '{{vars.plugins_dir}}' | Out-Null
+Copy-Item -Recurse -Force 'me.iany.clashTraffic.ulanziPlugin' $dst
+'''
+
+[tasks.install]
+description = "Install all plugins into UlanziDeck Plugins folder"
+depends = ["install:*"]
