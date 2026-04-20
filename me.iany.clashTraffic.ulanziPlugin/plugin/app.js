@@ -276,8 +276,8 @@ TrafficMonitor.prototype.scheduleReconnect = function () {
 
 TrafficMonitor.prototype.handlePress = function () {
     const url = this.connected
-        ? (this.settings.onlineAction || '')
-        : (this.settings.offlineAction || '');
+        ? (this.settings.onlineUrl || '')
+        : (this.settings.offlineUrl || '');
     const target = (url || '').trim();
     if (!target) return;
     $UD.openUrl(target);

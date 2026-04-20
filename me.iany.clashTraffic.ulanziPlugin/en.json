@@ -12,9 +12,9 @@
     "API Token": "API Token",
     "Refresh Interval (s)": "Refresh Interval (s)",
     "How often the chart samples and redraws. Intermediate frames are averaged.": "How often the chart samples and redraws. Intermediate frames are averaged.",
-    "Online Press Action": "Online Press Action",
-    "Offline Press Action": "Offline Press Action",
-    "URL or local path to open when key is pressed while connected.": "URL or local path to open when key is pressed while connected.",
-    "URL or local path to open when key is pressed while service is offline.": "URL or local path to open when key is pressed while service is offline."
+    "Online Press URL": "Online Press URL",
+    "Offline Press URL": "Offline Press URL",
+    "URL to open when key is pressed while connected.": "URL to open when key is pressed while connected.",
+    "URL to open when key is pressed while service is offline.": "URL to open when key is pressed while service is offline."
   }
 }
