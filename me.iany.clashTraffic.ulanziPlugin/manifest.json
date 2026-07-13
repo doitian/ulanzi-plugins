@@ -3,7 +3,7 @@
   "Name": "Clash Traffic",
   "Description": "Show real-time Clash up/down traffic as a line chart on a key.",
   "Icon": "resources/icon.svg",
-  "Version": "1.0.0",
+  "Version": "1.0.1",
   "Category": "Clash Traffic",
   "CategoryIcon": "resources/icon.svg",
   "CodePath": "plugin/app.html",
