@@ -1,27 +1,27 @@
 {
   "Author": "iany",
-  "Name": "Clash Traffic",
-  "Description": "Show real-time Clash up/down traffic as a line chart on a key.",
+  "Name": "iany's JS Widgets",
+  "Description": "A collection of JavaScript widgets for Ulanzi Deck.",
   "Icon": "resources/icon.svg",
   "Version": "1.0.0",
-  "Category": "Clash Traffic",
+  "Category": "iany's JS Widgets",
   "CategoryIcon": "resources/icon.svg",
   "CodePath": "plugin/app.html",
   "Type": "JavaScript",
   "PrivateAPI": true,
-  "UUID": "me.iany.ulanzistudio.clashTraffic",
+  "UUID": "me.iany.ulanzistudio.js",
   "Actions": [
     {
-      "Name": "Traffic",
-      "Icon": "resources/actionIcon.svg",
-      "PropertyInspectorPath": "property-inspector/traffic/inspector.html",
+      "Name": "Clash Traffic",
+      "Icon": "resources/clash-traffic/action-icon.svg",
+      "PropertyInspectorPath": "property-inspector/clash-traffic/inspector.html",
       "state": 0,
       "States": [
-        { "Name": "Connected", "Image": "resources/actionIcon.svg" },
-        { "Name": "Disconnected", "Image": "resources/offline.svg" }
+        { "Name": "Connected", "Image": "resources/clash-traffic/action-icon.svg" },
+        { "Name": "Disconnected", "Image": "resources/clash-traffic/offline.svg" }
       ],
       "Tooltip": "Show Clash up/down traffic chart",
-      "UUID": "me.iany.ulanzistudio.clashTraffic.traffic",
+      "UUID": "me.iany.ulanzistudio.js.clashTraffic",
       "SupportedInMultiActions": false,
       "DisableAutomaticStates": true,
       "Controllers": ["Keypad"],

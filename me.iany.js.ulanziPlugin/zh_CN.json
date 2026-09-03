@@ -1,9 +1,9 @@
 {
-  "Name": "Clash 流量",
-  "Description": "在按键上以折线图实时显示 Clash 上下行流量。",
+  "Name": "iany 的 JS 小组件",
+  "Description": "适用于 Ulanzi Deck 的 JavaScript 小组件合集。",
   "Actions": [
     {
-      "Name": "流量",
+      "Name": "Clash 流量",
       "Tooltip": "显示 Clash 上下行流量图"
     }
   ],

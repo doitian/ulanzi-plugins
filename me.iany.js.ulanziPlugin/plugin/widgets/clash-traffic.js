@@ -1,6 +1,7 @@
 /* global $UD */
 
-const PLUGIN_UUID = 'me.iany.ulanzistudio.clashTraffic';
+(function () {
+
 const HISTORY_SIZE = 12;
 const ICON_SIZE = 144;
 const COLOR_BG = '#1e1f22';
@@ -17,71 +18,9 @@ const DEFAULT_REFRESH_INTERVAL_S = 1;
 const MIN_REFRESH_INTERVAL_S = 1;
 const MAX_REFRESH_INTERVAL_S = 60;
 
-const ACTION_CACHES = {};
+// One instance is created by the shared plugin service for each key context.
 
-$UD.connect(PLUGIN_UUID);
-
-$UD.onConnected(() => {
-    // The host may have been restarted while the plugin process kept running.
-    // Re-assert each known monitor: ensure the upstream Clash WebSocket is
-    // alive and re-issue a render so the key's icon reflects current state.
-    for (const ctx in ACTION_CACHES) {
-        if (Object.prototype.hasOwnProperty.call(ACTION_CACHES, ctx)) {
-            ACTION_CACHES[ctx].ensureConnected();
-            ACTION_CACHES[ctx].render();
-        }
-    }
-});
-
-$UD.onAdd((jsn) => {
-    const context = jsn.context;
-    if (!ACTION_CACHES[context]) {
-        ACTION_CACHES[context] = new TrafficMonitor(context);
-    }
-    ACTION_CACHES[context].updateSettings((jsn && jsn.param) || {});
-    ACTION_CACHES[context].ensureConnected();
-});
-
-$UD.onSetActive((jsn) => {
-    const inst = ACTION_CACHES[jsn.context];
-    if (inst) inst.setActive(jsn.active);
-});
-
-$UD.onRun((jsn) => {
-    const inst = ACTION_CACHES[jsn.context];
-    if (inst) inst.handlePress();
-});
-
-$UD.onClear((jsn) => {
-    if (!jsn.param) return;
-    for (const item of jsn.param) {
-        const ctx = item.context;
-        if (ACTION_CACHES[ctx]) {
-            ACTION_CACHES[ctx].destroy();
-            delete ACTION_CACHES[ctx];
-        }
-    }
-});
-
-$UD.onParamFromApp((jsn) => {
-    const inst = ACTION_CACHES[jsn.context];
-    if (!inst) return;
-    if (jsn.param) inst.updateSettings(jsn.param);
-    inst.ensureConnected();
-});
-
-$UD.onParamFromPlugin((jsn) => {
-    const inst = ACTION_CACHES[jsn.context];
-    if (!inst) return;
-    if (jsn.param) inst.updateSettings(jsn.param);
-    inst.ensureConnected();
-});
-
-// ---------------------------------------------------------------------------
-// TrafficMonitor — one instance per key context
-// ---------------------------------------------------------------------------
-
-function TrafficMonitor(context) {
+function ClashTrafficWidget(context) {
     this.context = context;
     this.settings = {};
     this.history = []; // [{up, down}]
@@ -111,7 +50,7 @@ function TrafficMonitor(context) {
     this.render();
 }
 
-TrafficMonitor.prototype.updateSettings = function (settings) {
+ClashTrafficWidget.prototype.updateSettings = function (settings) {
     const oldUrl = this.buildWsUrl();
     const oldIntervalMs = this.sampleIntervalMs;
     this.settings = Object.assign({}, this.settings, settings || {});
@@ -129,7 +68,7 @@ TrafficMonitor.prototype.updateSettings = function (settings) {
     this.render();
 };
 
-TrafficMonitor.prototype.resolveRefreshIntervalMs = function () {
+ClashTrafficWidget.prototype.resolveRefreshIntervalMs = function () {
     let v = Number(this.settings.refreshInterval);
     if (!isFinite(v) || v <= 0) v = DEFAULT_REFRESH_INTERVAL_S;
     if (v < MIN_REFRESH_INTERVAL_S) v = MIN_REFRESH_INTERVAL_S;
@@ -137,7 +76,7 @@ TrafficMonitor.prototype.resolveRefreshIntervalMs = function () {
     return Math.round(v * 1000);
 };
 
-TrafficMonitor.prototype.startSampleTimer = function () {
+ClashTrafficWidget.prototype.startSampleTimer = function () {
     if (this.sampleTimer) {
         clearInterval(this.sampleTimer);
         this.sampleTimer = null;
@@ -146,7 +85,7 @@ TrafficMonitor.prototype.startSampleTimer = function () {
     this.sampleTimer = setInterval(() => this.flushBucket(), this.sampleIntervalMs);
 };
 
-TrafficMonitor.prototype.flushBucket = function () {
+ClashTrafficWidget.prototype.flushBucket = function () {
     if (this.destroyed) return;
     if (!this.connected) return;
     const b = this.bucket;
@@ -162,11 +101,11 @@ TrafficMonitor.prototype.flushBucket = function () {
     this.render();
 };
 
-TrafficMonitor.prototype.ensureConnected = function () {
+ClashTrafficWidget.prototype.ensureConnected = function () {
     if (this.destroyed) return;
     // Reconnect if the socket is missing or no longer in OPEN/CONNECTING state.
     // This handles host-app restarts where the plugin process is preserved but
-    // existing TrafficMonitor instances may be holding stale or closed sockets,
+    // existing widget instances may be holding stale or closed sockets,
     // and also covers the first add when the URL happens to match the default.
     const ws = this.ws;
     const alive = ws && (ws.readyState === 0 || ws.readyState === 1);
@@ -182,7 +121,7 @@ TrafficMonitor.prototype.ensureConnected = function () {
     }
 };
 
-TrafficMonitor.prototype.buildWsUrl = function () {
+ClashTrafficWidget.prototype.buildWsUrl = function () {
     const base = (this.settings.wsUrl || 'ws://127.0.0.1:9090/traffic').trim();
     const token = (this.settings.token || '').trim();
     if (!token) return base;
@@ -190,7 +129,7 @@ TrafficMonitor.prototype.buildWsUrl = function () {
     return base + sep + 'token=' + encodeURIComponent(token);
 };
 
-TrafficMonitor.prototype.setActive = function (active) {
+ClashTrafficWidget.prototype.setActive = function (active) {
     const wasActive = this.active;
     this.active = !!(active && active.toString() === 'true');
     if (this.active && !wasActive) {
@@ -199,7 +138,7 @@ TrafficMonitor.prototype.setActive = function (active) {
     this.render();
 };
 
-TrafficMonitor.prototype.connectWs = function () {
+ClashTrafficWidget.prototype.connectWs = function () {
     this.closeWs();
     if (this.destroyed) return;
 
@@ -250,7 +189,7 @@ TrafficMonitor.prototype.connectWs = function () {
     };
 };
 
-TrafficMonitor.prototype.closeWs = function () {
+ClashTrafficWidget.prototype.closeWs = function () {
     if (this.ws) {
         try {
             this.ws.onclose = null;
@@ -263,7 +202,7 @@ TrafficMonitor.prototype.closeWs = function () {
     }
 };
 
-TrafficMonitor.prototype.scheduleReconnect = function () {
+ClashTrafficWidget.prototype.scheduleReconnect = function () {
     if (this.destroyed) return;
     if (this.reconnectTimer) return;
     const delay = this.reconnectDelay;
@@ -274,7 +213,7 @@ TrafficMonitor.prototype.scheduleReconnect = function () {
     }, delay);
 };
 
-TrafficMonitor.prototype.handlePress = function () {
+ClashTrafficWidget.prototype.handlePress = function () {
     const url = this.connected
         ? (this.settings.onlineUrl || '')
         : (this.settings.offlineUrl || '');
@@ -283,7 +222,7 @@ TrafficMonitor.prototype.handlePress = function () {
     $UD.openUrl(target);
 };
 
-TrafficMonitor.prototype.destroy = function () {
+ClashTrafficWidget.prototype.destroy = function () {
     this.destroyed = true;
     this.closeWs();
     if (this.reconnectTimer) {
@@ -300,7 +239,7 @@ TrafficMonitor.prototype.destroy = function () {
     }
 };
 
-TrafficMonitor.prototype.checkStale = function () {
+ClashTrafficWidget.prototype.checkStale = function () {
     if (this.destroyed) return;
     if (!this.connected) return;
     if (!this.lastMessageAt) return;
@@ -309,7 +248,7 @@ TrafficMonitor.prototype.checkStale = function () {
     this.connectWs();
 };
 
-TrafficMonitor.prototype.render = function () {
+ClashTrafficWidget.prototype.render = function () {
     if (!this.active) return;
     if (this.connected) {
         this.drawChart();
@@ -318,11 +257,11 @@ TrafficMonitor.prototype.render = function () {
     }
 };
 
-TrafficMonitor.prototype.drawOffline = function () {
-    $UD.setPathIcon(this.context, 'resources/offline.svg', '');
+ClashTrafficWidget.prototype.drawOffline = function () {
+    $UD.setPathIcon(this.context, 'resources/clash-traffic/offline.svg', '');
 };
 
-TrafficMonitor.prototype.drawChart = function () {
+ClashTrafficWidget.prototype.drawChart = function () {
     const ctx = this.ctx2d;
     const W = ICON_SIZE;
     const H = ICON_SIZE;
@@ -428,3 +367,7 @@ function formatSpeed(bytesPerSec) {
     if (n >= 10) return n.toFixed(1) + units[i];
     return n.toFixed(2) + units[i];
 }
+
+window.ClashTrafficWidget = ClashTrafficWidget;
+
+}());
