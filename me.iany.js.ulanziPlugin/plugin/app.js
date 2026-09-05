@@ -1,8 +1,9 @@
-/* global $UD, ClashTrafficWidget */
+/* global $UD, ClashTrafficWidget, AiUsageWidget */
 
 const PLUGIN_UUID = 'me.iany.ulanzistudio.js';
 const WIDGETS = {
-    'me.iany.ulanzistudio.js.clashTraffic': ClashTrafficWidget
+    'me.iany.ulanzistudio.js.clashTraffic': ClashTrafficWidget,
+    'me.iany.ulanzistudio.js.aiUsage': AiUsageWidget
 };
 const INSTANCES = {};
 

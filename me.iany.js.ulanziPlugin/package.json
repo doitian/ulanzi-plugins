@@ -1,0 +1,9 @@
+{
+  "name": "iany-ulanzi-widgets",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@napi-rs/canvas": "0.1.100",
+    "ws": "8.21.3"
+  }
+}

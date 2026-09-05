@@ -5,6 +5,10 @@
     {
       "Name": "Clash 流量",
       "Tooltip": "显示 Clash 上下行流量图"
+    },
+    {
+      "Name": "AI 用量",
+      "Tooltip": "显示 AI 剩余用量百分比和重置时间"
     }
   ],
   "Localization": {
@@ -15,6 +19,21 @@
     "Online Press URL": "在线时按键 URL",
     "Offline Press URL": "离线时按键 URL",
     "URL to open when key is pressed while connected.": "连接成功时按键打开的 URL。",
-    "URL to open when key is pressed while service is offline.": "服务离线时按键打开的 URL。"
+    "URL to open when key is pressed while service is offline.": "服务离线时按键打开的 URL。",
+    "Provider": "提供商",
+    "Usage window": "用量周期",
+    "5 hours": "5 小时",
+    "7 days": "7 天",
+    "7 days - Fable": "7 天 - Fable",
+    "7 days - Sonnet": "7 天 - Sonnet",
+    "Label": "标签",
+    "Uses the active CLI account.": "使用 CLI 当前登录的账户。",
+    "Balance": "余额",
+    "Rolling (5 hours)": "滚动周期（5 小时）",
+    "Weekly": "每周",
+    "Monthly": "每月",
+    "Press URL": "按键打开的 URL",
+    "Leave blank to open the provider's default usage page.": "留空打开提供商的默认用量页面。",
+    "Usage refreshes automatically. Press to open the page and refresh.": "用量会自动刷新。按键打开页面并刷新用量。"
   }
 }

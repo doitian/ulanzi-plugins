@@ -5,6 +5,10 @@
     {
       "Name": "Clash Traffic",
       "Tooltip": "Show Clash up/down traffic chart"
+    },
+    {
+      "Name": "AI Usage",
+      "Tooltip": "Show AI remaining usage percentage and reset time"
     }
   ],
   "Localization": {
@@ -15,6 +19,21 @@
     "Online Press URL": "Online Press URL",
     "Offline Press URL": "Offline Press URL",
     "URL to open when key is pressed while connected.": "URL to open when key is pressed while connected.",
-    "URL to open when key is pressed while service is offline.": "URL to open when key is pressed while service is offline."
+    "URL to open when key is pressed while service is offline.": "URL to open when key is pressed while service is offline.",
+    "Provider": "Provider",
+    "Usage window": "Usage window",
+    "5 hours": "5 hours",
+    "7 days": "7 days",
+    "7 days - Fable": "7 days - Fable",
+    "7 days - Sonnet": "7 days - Sonnet",
+    "Label": "Label",
+    "Uses the active CLI account.": "Uses the active CLI account.",
+    "Balance": "Balance",
+    "Rolling (5 hours)": "Rolling (5 hours)",
+    "Weekly": "Weekly",
+    "Monthly": "Monthly",
+    "Press URL": "Press URL",
+    "Leave blank to open the provider's default usage page.": "Leave blank to open the provider's default usage page.",
+    "Usage refreshes automatically. Press to open the page and refresh.": "Usage refreshes automatically. Press to open the page and refresh."
   }
 }
