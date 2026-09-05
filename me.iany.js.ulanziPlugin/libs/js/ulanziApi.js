@@ -269,8 +269,12 @@ class UlanziStreamDeck {
      * @param {local} boolean 可选 | 若为本地地址为true
      * @param {object} param 可选 | 路径的参数值
      */
-    openUrl(url, local, param) {
+    openUrl(url, local, param, context) {
+        const decoded = context ? this.decodeContext(context) : {};
         this.send(Events.OPENURL, {
+            uuid: decoded.uuid || this.uuid,
+            key: decoded.key || this.key,
+            actionid: decoded.actionid || this.actionid,
             url,
             local: local ? true : false,
             param: param ? param : null,

@@ -219,7 +219,7 @@ ClashTrafficWidget.prototype.handlePress = function () {
         : (this.settings.offlineUrl || '');
     const target = (url || '').trim();
     if (!target) return;
-    $UD.openUrl(target);
+    $UD.openUrl(target, false, null, this.context);
 };
 
 ClashTrafficWidget.prototype.destroy = function () {
