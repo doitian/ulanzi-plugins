@@ -69,6 +69,13 @@ function codexLimits(data) {
     }
     return limits;
 }
+function grokLimits(data) {
+    const config = object(data.config) ? data.config : data;
+    const period = object(config.currentPeriod) ? config.currentPeriod : null;
+    const used = typeof config.creditUsagePercent === 'number' && Number.isFinite(config.creditUsagePercent) ? config.creditUsagePercent : 0;
+    const limit = normalizedLimit(used, (period && period.end) || config.billingPeriodEnd);
+    return limit ? { weekly: limit } : {};
+}
 async function readCredential(file) {
     try {
         const raw = await fs.readFile(file, 'utf8');
@@ -229,9 +236,56 @@ function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl =
             return { accounts: [{ email: '', active: true, limits: { balance: { remaining_amount: balance, currency: base.includes('.cn/') ? 'CNY' : 'USD' } } }] };
         } catch (error) { return { error: error instanceof UsageError ? error.code : 'request_failed' }; }
     }
+    async function grok() {
+        try {
+            const file = env.ULANZI_GROK_CREDENTIALS || path.join(env.GROK_HOME || path.join(home, '.grok'), 'auth.json');
+            let credential = await readCredential(file);
+            const session = () => Object.values(credential.data).find(entry => object(entry) && typeof entry.key === 'string' && entry.key) || null;
+            if (!session()) throw new UsageError('auth_missing');
+            async function refresh() {
+                const latest = await readCredential(file);
+                if (latest.raw !== credential.raw) { credential = latest; return; }
+                const entry = session();
+                if (typeof entry.refresh_token !== 'string' || !entry.refresh_token) throw new UsageError('auth_denied');
+                const clientId = typeof entry.oidc_client_id === 'string' && entry.oidc_client_id ? entry.oidc_client_id : '';
+                if (!clientId) throw new UsageError('auth_denied');
+                const result = await request('https://auth.x.ai/oauth2/token', {
+                    method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: entry.refresh_token, client_id: clientId }).toString()
+                });
+                if (typeof result.access_token !== 'string' || !result.access_token) throw new UsageError('invalid_response');
+                entry.key = result.access_token;
+                if (typeof result.refresh_token === 'string' && result.refresh_token) entry.refresh_token = result.refresh_token;
+                if (typeof result.expires_in === 'number' && result.expires_in > 0) entry.expires_at = new Date(now() + result.expires_in * 1000).toISOString();
+                await writeCredential(file, credential.raw, credential.data);
+                credential = await readCredential(file);
+            }
+            const expires = Date.parse(session().expires_at) || jwtClaims(session().key).exp * 1000;
+            let refreshed = false;
+            if (typeof expires === 'number' && expires > 0 && expires <= now() + 30000) { await refresh(); refreshed = true; }
+            async function usageRequest() {
+                const token = session()?.key;
+                if (typeof token !== 'string' || !token) throw new UsageError('auth_missing');
+                return request('https://cli-chat-proxy.grok.com/v1/billing?format=credits', {
+                    headers: { Accept: 'application/json', Authorization: 'Bearer ' + token, 'User-Agent': 'ulanzi-js-widgets/1.0' }
+                });
+            }
+            let data;
+            try { data = await usageRequest(); }
+            catch (error) {
+                if (error.status !== 401 || refreshed) throw error;
+                await refresh();
+                data = await usageRequest();
+            }
+            const limits = grokLimits(data);
+            if (!Object.keys(limits).length) throw new UsageError('invalid_response');
+            const email = session().email;
+            return { accounts: [{ email: typeof email === 'string' ? email : '', active: true, limits }] };
+        } catch (error) { return { error: error instanceof UsageError ? error.code : 'request_failed' }; }
+    }
     return async () => {
-        const [claude, codex, go, balance, china] = await Promise.all([provider('claude'), provider('codex'), openCodeGo(), moonshot(), moonshot(true)]);
-        return { providers: { claude, codex, 'opencode-go': go, moonshot: balance, 'moonshot-cn': china } };
+        const [claude, codex, go, balance, china, xai] = await Promise.all([provider('claude'), provider('codex'), openCodeGo(), moonshot(), moonshot(true), grok()]);
+        return { providers: { claude, codex, 'opencode-go': go, moonshot: balance, 'moonshot-cn': china, xai } };
     };
 }
-module.exports = { createUsageClient, claudeLimits, codexLimits, writeCredential };
+module.exports = { createUsageClient, claudeLimits, codexLimits, grokLimits, writeCredential };

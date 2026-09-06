@@ -37,6 +37,7 @@ test('selects active/exact account, remaining vs used, missing/error and model w
     assert.equal(select(fixture, { account: 'OLD@example.com' }).remaining, 12);
     assert.equal(select(fixture, { limit: 'seven_day' }).remaining, 0);
     assert.equal(select(fixture, { provider: 'claude', limit: 'seven_day_fable' }).remaining, 40);
+    assert.equal(select({ providers: { xai: { accounts: [{ active: true, limits: { weekly: { remaining_percent: 76 } } }] } } }, { provider: 'xai', limit: 'weekly' }).remaining, 76);
     assert.ok(select(fixture, { account: 'unknown' }).error);
     assert.ok(select(fixture, { limit: 'absent' }).error);
     for (const remaining of [null, '', '50', NaN]) {
@@ -73,7 +74,7 @@ test('press opens provider defaults or an override, including while offline', ()
     for (const [provider, expected] of Object.entries({
         claude: 'https://claude.ai/new#settings/usage', codex: 'https://chatgpt.com/#settings/Usage',
         'opencode-go': 'https://opencode.ai/go', moonshot: 'https://platform.kimi.com/console/account',
-        'moonshot-cn': 'https://platform.kimi.com/console/account'
+        'moonshot-cn': 'https://platform.kimi.com/console/account', xai: 'https://grok.com/?_s=usage'
     })) {
         widget.settings = { provider };
         widget.handlePress(); assert.equal(opened.at(-1), expected);

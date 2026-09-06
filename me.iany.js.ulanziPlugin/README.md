@@ -34,7 +34,7 @@ root to install the collection.
 
 ### AI Usage
 
-Shows Claude or Codex **remaining** usage percentage, or Moonshot account balance.
+Shows Claude, Codex, or xAI (Grok) **remaining** usage percentage, or Moonshot account balance.
 Matches the reference layout: label at top left, provider icon at top right,
 large value in the center, and reset duration or balance decimals at the bottom. Add separate keys for the 5-hour and 7-day windows.
 Claude also supports `seven_day_fable` and `seven_day_sonnet` when returned
@@ -47,8 +47,8 @@ Ulanzi Studio launches this service from `plugin/main.js`; it starts one shared
 HTTP server for all widgets and renders their icons using Canvas. The property
 inspectors remain HTML.
 
-1. Install Node.js 18+ and sign in with your provider's CLI (`codex login`, or
-   `/login` inside Claude Code). The helper uses the active CLI account only.
+1. Install Node.js 18+ and sign in with your provider's CLI (`codex login`,
+   `grok login`, or `/login` inside Claude Code). The helper uses the active CLI account only.
 2. Run `mise run install` on Windows, then restart Ulanzi Studio. The host starts
    the plugin and its shared server automatically. Installation removes the old
    Windows Startup shortcut and stops the legacy standalone server. No sign-in
@@ -78,12 +78,20 @@ and also request a forced usage refresh. Refreshes share the existing
 | Claude | `https://claude.ai/new#settings/usage` |
 | Codex | `https://chatgpt.com/#settings/Usage` |
 | OpenCode Go | `https://opencode.ai/go` |
+| xAI (Grok) | `https://grok.com/?_s=usage` |
 | Moonshot / Moonshot China | `https://platform.kimi.com/console/account` |
 
 Percentage colors match the reference: green at 60% or more, yellow from 30%,
 and red below 30%; missing data is gray. Errors display a red code. Retained
 stale readings are gray with a small stale marker. Reset durations use `1h2m`,
 `3d4h`, `<1m`, or `now`.
+
+For **xAI (Grok)**, select **Weekly**. Credentials come from `grok login` in
+`~/.grok/auth.json` (`GROK_HOME` is respected). Set `ULANZI_GROK_CREDENTIALS`
+to override the exact file path. The helper calls
+`https://cli-chat-proxy.grok.com/v1/billing?format=credits` and shows the remaining
+percentage and reset time for the current SuperGrok week. Near-expiry access tokens
+are refreshed with the Grok CLI refresh token.
 
 For **OpenCode Go**, select **Rolling (5 hours)**, **Weekly**, or **Monthly**.
 Credentials come from the `opencode-go` API entry created by OpenCode `/connect`,
@@ -113,10 +121,10 @@ Balances show `¥123` at the center and `.45` below; large values use `¥12K`
 and `.345`. CNY is green from ¥70, yellow from ¥36, otherwise red; USD is green
 from $12, yellow from $6, otherwise red. Negative balances display as zero.
 
-Credential files default to `~/.codex/auth.json` and
-`~/.claude/.credentials.json` (`~` is your user directory, including on Windows).
-`CODEX_HOME` and `CLAUDE_CONFIG_DIR` are respected. Set
-`ULANZI_CODEX_CREDENTIALS` or `ULANZI_CLAUDE_CREDENTIALS` in the helper environment
+Credential files default to `~/.codex/auth.json`,
+`~/.claude/.credentials.json`, and `~/.grok/auth.json` (`~` is your user directory, including on Windows).
+`CODEX_HOME`, `CLAUDE_CONFIG_DIR`, and `GROK_HOME` are respected. Set
+`ULANZI_CODEX_CREDENTIALS`, `ULANZI_CLAUDE_CREDENTIALS`, or `ULANZI_GROK_CREDENTIALS` in the helper environment
 to override the exact file path. This version supports file credentials;
 OS-keychain-only logins are not supported. Existing account-email settings act
 as an optional match against the active Codex account, not an account switch.

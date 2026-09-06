@@ -9,7 +9,8 @@ const PROVIDER_URLS = {
     codex: 'https://chatgpt.com/#settings/Usage',
     'opencode-go': 'https://opencode.ai/go',
     moonshot: 'https://platform.kimi.com/console/account',
-    'moonshot-cn': 'https://platform.kimi.com/console/account'
+    'moonshot-cn': 'https://platform.kimi.com/console/account',
+    xai: 'https://grok.com/?_s=usage'
 };
 
 function sourceFor(url) {
@@ -182,11 +183,11 @@ AiUsageWidget.prototype.render = function () {
         const icon = new Image();
         this.icon = icon;
         icon.onload = () => { if (this.icon === icon) this.render(); };
-        icon.src = '../resources/ai-usage/' + ({ claude: 'claude', moonshot: 'moonshot', 'moonshot-cn': 'moonshot', 'opencode-go': 'opencode-go' }[provider] || 'codex') + '.svg';
+        icon.src = '../resources/ai-usage/' + ({ claude: 'claude', moonshot: 'moonshot', 'moonshot-cn': 'moonshot', 'opencode-go': 'opencode-go', xai: 'xai' }[provider] || 'codex') + '.svg';
     }
     if (this.icon && this.icon.complete && this.icon.naturalWidth) ctx.drawImage(this.icon, 100, 15, 29, 29);
     ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff';
-    const label = { five_hour: '5H', seven_day: '7D', seven_day_fable: 'FABLE', seven_day_sonnet: 'SONNET', balance: 'BAL', rolling: 'GO 5H', weekly: 'GO 7D', monthly: 'GO 30D' }[this.settings.limit || 'five_hour'] || this.settings.limit;
+    const label = { five_hour: '5H', seven_day: '7D', seven_day_fable: 'FABLE', seven_day_sonnet: 'SONNET', balance: 'BAL', rolling: 'GO 5H', weekly: provider === 'xai' ? '7D' : 'GO 7D', monthly: provider === 'xai' ? '30D' : 'GO 30D' }[this.settings.limit || 'five_hour'] || this.settings.limit;
     drawFit(ctx, this.settings.label || label, 15, 29, 20, 80);
     const display = presentation(usage, stale);
     ctx.textAlign = 'center'; ctx.fillStyle = display.color;

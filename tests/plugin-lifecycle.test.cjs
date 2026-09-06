@@ -17,6 +17,7 @@ test('Ulanzi launch starts the bridge, renders widgets, and exits with the host'
             ULANZI_CODEX_CREDENTIALS: path.join(__dirname, 'missing-auth.json'),
             ULANZI_CLAUDE_CREDENTIALS: path.join(__dirname, 'missing-auth.json'),
             ULANZI_OPENCODE_AUTH: path.join(__dirname, 'missing-auth.json'),
+            ULANZI_GROK_CREDENTIALS: path.join(__dirname, 'missing-auth.json'),
             MOONSHOT_API_KEY: '', MOONSHOT_CN_API_KEY: '', OPENCODE_GO_API_KEY: ''
         }, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore']
     });

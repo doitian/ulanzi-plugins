@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { createUsageClient, claudeLimits, codexLimits } = require('../me.iany.js.ulanziPlugin/bridge/usage-providers.cjs');
+const { createUsageClient, claudeLimits, codexLimits, grokLimits } = require('../me.iany.js.ulanziPlugin/bridge/usage-providers.cjs');
 const time = 1900000000000;
 const jwt = claims => 'header.' + Buffer.from(JSON.stringify(claims)).toString('base64url') + '.signature';
 const codexUsage = { rate_limit: {
@@ -98,6 +98,50 @@ test('Moonshot balance uses the correct endpoint and currency', async t => {
     const result = await client();
     assert.deepEqual(result.providers.moonshot.accounts[0].limits.balance, { remaining_amount: 123.45, currency: 'CNY' });
     assert.ok(!JSON.stringify(result).includes('synthetic-key'));
+});
+test('Grok weekly remaining uses CLI tokens, treats missing percent as unused, and refreshes', async t => {
+    const data = await setup(t);
+    const grokFile = path.join(path.dirname(data.codexFile), 'grok.json');
+    data.options.env.ULANZI_GROK_CREDENTIALS = grokFile;
+    const session = { other: { keep: true }, key: 'grok-access', refresh_token: 'grok-refresh', oidc_client_id: 'grok-client', email: 'grok@example.com', expires_at: new Date(time + 3600000).toISOString() };
+    await fs.writeFile(grokFile, JSON.stringify({ 'https://auth.x.ai::grok-client': session }));
+    const grokUsage = { config: { creditUsagePercent: 24, currentPeriod: { type: 'USAGE_PERIOD_TYPE_WEEKLY', end: '2030-03-18T12:00:00Z' } } };
+    const client = createUsageClient({ ...data.options, fetchImpl: async (url, options) => {
+        if (url.includes('cli-chat-proxy.grok.com')) {
+            assert.equal(options.headers.Authorization, 'Bearer grok-access');
+            return json(grokUsage);
+        }
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    } });
+    const result = await client();
+    assert.equal(result.providers.xai.accounts[0].limits.weekly.remaining_percent, 76);
+    assert.equal(result.providers.xai.accounts[0].email, 'grok@example.com');
+    assert.equal(grokLimits({ config: { currentPeriod: { type: 'USAGE_PERIOD_TYPE_WEEKLY', end: '2030-03-18T12:00:00Z' } } }).weekly.remaining_percent, 100);
+    assert.deepEqual(grokLimits({ config: {} }), {});
+    session.key = jwt({ exp: time / 1000 - 1 });
+    session.expires_at = new Date(time - 1).toISOString();
+    await fs.writeFile(grokFile, JSON.stringify({ 'https://auth.x.ai::grok-client': session, extra: { keep: true } }));
+    let refreshes = 0;
+    const rotated = await createUsageClient({ ...data.options, fetchImpl: async (url, options) => {
+        if (url.endsWith('/oauth2/token')) {
+            refreshes++;
+            const form = new URLSearchParams(options.body);
+            assert.equal(form.get('grant_type'), 'refresh_token');
+            assert.equal(form.get('client_id'), 'grok-client');
+            return json({ access_token: 'rotated-grok', refresh_token: 'rotated-grok-refresh', expires_in: 3600 });
+        }
+        if (url.includes('cli-chat-proxy.grok.com')) {
+            assert.equal(options.headers.Authorization, 'Bearer rotated-grok');
+            return json(grokUsage);
+        }
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    } })();
+    assert.equal(refreshes, 1);
+    assert.ok(rotated.providers.xai.accounts);
+    const stored = JSON.parse(await fs.readFile(grokFile, 'utf8'));
+    assert.equal(stored['https://auth.x.ai::grok-client'].refresh_token, 'rotated-grok-refresh');
+    assert.deepEqual(stored.extra, { keep: true });
+    assert.ok(!JSON.stringify(rotated).includes('grok-refresh'));
 });
 test('normalizes both API schemas, duration-based Codex windows and scoped Claude limits', () => {
     assert.equal(codexLimits(codexUsage).five_hour.remaining_percent, 88);
