@@ -60,8 +60,8 @@ function createUsageRoute({ run = createUsageClient(), now = Date.now } = {}) {
         });
         return pending;
     }
-    return async function usageRoute(url) {
-        return usage(url.searchParams.get('refresh') === '1');
+    return async function usageRoute(url, force = false) {
+        return usage(force || url.searchParams.get('refresh') === '1');
     };
 }
 

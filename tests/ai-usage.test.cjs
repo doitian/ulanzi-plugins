@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const { createUsageRoute, sanitize } = require('../me.iany.js.ulanziPlugin/bridge/ai-usage.cjs');
-const { createServer } = require('../me.iany.js.ulanziPlugin/bridge/server.cjs');
+const { createServer, createRoutes } = require('../me.iany.js.ulanziPlugin/bridge/server.cjs');
 const root = path.join(__dirname, '../me.iany.js.ulanziPlugin');
 const fixture = { providers: {
     codex: { accounts: [
@@ -199,6 +199,58 @@ test('helper caches, coalesces requests, rate-limits retries and validates brows
     assert.equal(preflight.status, 204);
     assert.equal(preflight.headers.get('access-control-allow-origin'), 'null');
 });
+test('refresh endpoint shares the usage cache, throttle and in-flight requests', async t => {
+    let calls = 0; let time = 100000; let fail = false;
+    const usageRoute = createUsageRoute({ now: () => time, run: async () => {
+        calls++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        if (fail) throw new Error('private upstream details');
+        return fixture;
+    } });
+    const server = createServer({ routes: createRoutes({ usageRoute }) });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+    const base = 'http://127.0.0.1:' + server.address().port;
+    const headers = { 'X-Ulanzi-Bridge': '1', Origin: 'null' };
+    const read = () => fetch(base + '/usage', { headers });
+    const refresh = () => fetch(base + '/usage/refresh', { method: 'POST', headers });
+    const initial = await (await read()).json();
+    assert.equal(calls, 1);
+    assert.deepEqual(await (await refresh()).json(), initial);
+    assert.equal(calls, 1);
+    time += 90000;
+    assert.deepEqual(await (await read()).json(), initial);
+    const responses = await Promise.all([refresh(), refresh()]);
+    assert.equal(calls, 2);
+    const updated = await responses[0].json();
+    assert.equal(updated.fetchedAt, time);
+    assert.deepEqual(await responses[1].json(), updated);
+    assert.deepEqual(await (await read()).json(), updated);
+    assert.equal(calls, 2);
+
+    const endpoint = base + '/usage/refresh';
+    assert.equal((await fetch(endpoint, { method: 'POST' })).status, 403);
+    assert.equal((await fetch(endpoint, { method: 'POST', headers: { 'X-Ulanzi-Usage': '1' } })).status, 403);
+    assert.equal((await fetch(endpoint, { method: 'POST', headers: { ...headers, Origin: 'https://evil.example' } })).status, 403);
+    const wrongMethod = await fetch(endpoint, { headers });
+    assert.equal(wrongMethod.status, 405);
+    assert.equal(wrongMethod.headers.get('allow'), 'POST, OPTIONS');
+    const preflight = await fetch(endpoint, { method: 'OPTIONS', headers: { Origin: 'null' } });
+    assert.equal(preflight.status, 204);
+    assert.ok(preflight.headers.get('access-control-allow-methods').includes('POST'));
+    assert.equal(calls, 2);
+
+    time += 90000; fail = true;
+    const failed = await refresh();
+    assert.equal(failed.status, 503);
+    assert.ok(!(await failed.text()).includes('private'));
+    assert.equal((await refresh()).status, 503);
+    assert.equal(calls, 3);
+    time += 90000; fail = false;
+    assert.equal((await refresh()).status, 200);
+    assert.equal(calls, 4);
+});
+
 test('helper excludes secrets and isolates provider errors', () => {
     const output = sanitize({ providers: { codex: fixture.providers.codex, claude: { error: 'secret token' } }, token: 'secret' });
     assert.ok(!JSON.stringify(output).includes('secret'));

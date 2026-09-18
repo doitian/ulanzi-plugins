@@ -2,11 +2,12 @@
 const http = require('node:http');
 const { createUsageRoute } = require('./ai-usage.cjs');
 
-function createRoutes({ getInstances = () => [] } = {}) {
+function createRoutes({ getInstances = () => [], usageRoute = createUsageRoute() } = {}) {
     return new Map([
         ['/health', async () => ({ service: 'me.iany.ulanzistudio.js.bridge' })],
-        ['/instances', () => ({ instances: getInstances() })],
-        ['/usage', createUsageRoute()]
+        ['/usage/fetch', () => ({ instances: getInstances() })],
+        ['/usage', usageRoute],
+        ['/usage/refresh', url => usageRoute(url, true)]
         // Register other widget route factories here, on the same server.
     ]);
 }
@@ -22,14 +23,15 @@ function createServer({ routes = createRoutes() } = {}) {
         }
         res.setHeader('Access-Control-Allow-Origin', origin || 'null');
         res.setHeader('Access-Control-Allow-Headers', 'X-Ulanzi-Bridge, X-Ulanzi-Usage');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
         res.setHeader('Access-Control-Allow-Private-Network', 'true');
         res.setHeader('Cache-Control', 'no-store');
         if (req.method === 'OPTIONS') { res.writeHead(204).end(); return; }
-        if (req.method !== 'GET') { res.writeHead(405).end(); return; }
         let url;
         try { url = new URL(req.url, 'http://127.0.0.1'); }
         catch (_) { res.writeHead(400).end(); return; }
+        const method = url.pathname === '/usage/refresh' ? 'POST' : 'GET';
+        if (req.method !== method) { res.setHeader('Allow', method + ', OPTIONS'); res.writeHead(405).end(); return; }
         const legacyUsage = url.pathname === '/usage' && req.headers['x-ulanzi-usage'] === '1';
         if (req.headers['x-ulanzi-bridge'] !== '1' && !legacyUsage) {
             res.writeHead(403).end(); return;

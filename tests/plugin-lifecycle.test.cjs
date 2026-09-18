@@ -54,7 +54,7 @@ test('Ulanzi launch starts the bridge, renders widgets, and exits with the host'
     assert.notEqual(bridgePort, occupiedPort);
     const health = await fetch('http://127.0.0.1:' + bridgePort + '/health', { headers: { 'X-Ulanzi-Bridge': '1' } });
     assert.equal((await health.json()).service, 'me.iany.ulanzistudio.js.bridge');
-    const instancesUrl = 'http://127.0.0.1:' + bridgePort + '/instances';
+    const instancesUrl = 'http://127.0.0.1:' + bridgePort + '/usage/fetch';
     const readInstances = async () => {
         const response = await fetch(instancesUrl, { headers: { 'X-Ulanzi-Bridge': '1' } });
         assert.equal(response.status, 200);
@@ -75,6 +75,7 @@ test('Ulanzi launch starts the bridge, renders widgets, and exits with the host'
     assert.equal(initial[0].usage.error, 'CLI login required');
     assert.equal(initial[0].active, true);
     assert.equal((await fetch(instancesUrl)).status, 403);
+    assert.equal((await fetch('http://127.0.0.1:' + bridgePort + '/instances', { headers: { 'X-Ulanzi-Bridge': '1' } })).status, 404);
     assert.equal((await fetch(instancesUrl, { headers: { 'X-Ulanzi-Usage': '1' } })).status, 403);
     assert.equal((await fetch(instancesUrl, { headers: { 'X-Ulanzi-Bridge': '1', Origin: 'https://example.com' } })).status, 403);
     const second = { uuid: 'me.iany.ulanzistudio.js.aiUsage', key: 'second', actionid: 'test' };

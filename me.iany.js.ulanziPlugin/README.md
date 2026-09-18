@@ -159,7 +159,7 @@ live readings require CLI credentials and Ulanzi Studio.
 
 ## Configured AI Usage instances API
 
-`GET /instances` on the running plugin's bridge returns the AI Usage buttons
+`GET /usage/fetch` on the running plugin's bridge returns the AI Usage buttons
 reported by Ulanzi, including inactive buttons. Cleared buttons are removed.
 This does not enumerate saved profiles that Ulanzi has not loaded. The standalone
 `mise run bridge` server returns an empty list because it has no Ulanzi instances.
@@ -167,7 +167,7 @@ This does not enumerate saved profiles that Ulanzi has not loaded. The standalon
 Use the port from the startup log (`Widget bridge listening on http://127.0.0.1:<port>`):
 
 ```powershell
-Invoke-RestMethod "http://127.0.0.1:<port>/instances" -Headers @{ 'X-Ulanzi-Bridge' = '1' } |
+Invoke-RestMethod "http://127.0.0.1:<port>/usage/fetch" -Headers @{ 'X-Ulanzi-Bridge' = '1' } |
     ConvertTo-Json -Depth 10
 ```
 
@@ -199,6 +199,22 @@ or `null` before data arrives; unknown reset times are `null`. `stale` indicates
 a helper error or data older than 35 minutes. The top-level per-instance `error`
 reports a helper failure while any previous reading remains in `usage`.
 An empty configuration returns `{ "instances": [] }`.
+
+### Refresh AI usage
+
+`POST /usage/refresh` requests fresh usage from all providers and returns the same
+sanitized `{ "providers": { ... }, "fetchedAt": ... }` response as `GET /usage`.
+No request body is needed. It bypasses the 30-minute cache while respecting the
+shared 90-second throttle: requests within that interval return the cached data
+or the previous helper error. Concurrent refreshes share one in-flight request.
+Helper failures return HTTP 503; individual provider errors appear in `providers`.
+Buttons and `/usage/fetch` pick up the result on the next widget poll (within
+one minute). The existing `GET /usage?refresh=1` remains supported.
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:<port>/usage/refresh" -Method Post -Headers @{ 'X-Ulanzi-Bridge' = '1' } |
+    ConvertTo-Json -Depth 10
+```
 
 ## Adding another widget
 
