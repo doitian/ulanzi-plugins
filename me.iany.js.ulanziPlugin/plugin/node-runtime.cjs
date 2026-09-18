@@ -26,10 +26,13 @@ function loadWidgets(api, bridgeUrl) {
     for (const file of ['widgets/clash-traffic.js', 'widgets/ai-usage.js', 'app.js']) {
         vm.runInContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), context, { filename: file });
     }
-    return () => {
-        vm.runInContext('forEachInstance(instance => instance.destroy())', context);
-        for (const timer of timers) clearTimeout(timer);
-        timers.clear();
+    return {
+        getInstances: () => vm.runInContext('getAiUsageInstances()', context),
+        dispose() {
+            vm.runInContext('forEachInstance(instance => instance.destroy())', context);
+            for (const timer of timers) clearTimeout(timer);
+            timers.clear();
+        }
     };
 }
 module.exports = { loadWidgets };

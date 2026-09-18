@@ -2,9 +2,10 @@
 const http = require('node:http');
 const { createUsageRoute } = require('./ai-usage.cjs');
 
-function createRoutes() {
+function createRoutes({ getInstances = () => [] } = {}) {
     return new Map([
         ['/health', async () => ({ service: 'me.iany.ulanzistudio.js.bridge' })],
+        ['/instances', () => ({ instances: getInstances() })],
         ['/usage', createUsageRoute()]
         // Register other widget route factories here, on the same server.
     ]);

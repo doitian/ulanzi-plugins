@@ -169,6 +169,27 @@ AiUsageWidget.prototype.detach = function () {
     this.source = null;
 };
 AiUsageWidget.prototype.destroy = function () { this.destroyed = true; this.detach(); };
+AiUsageWidget.prototype.getSnapshot = function () {
+    const source = this.source;
+    const selected = source && source.data ? selectUsage(source.data, this.settings) : { error: source?.error || 'Loading...' };
+    const usage = selected.error ? { error: selected.error }
+        : typeof selected.amount === 'number' ? { remaining_amount: selected.amount, currency: selected.currency }
+        : { remaining_percent: selected.remaining, resets_at: Number.isFinite(selected.reset) ? new Date(selected.reset).toISOString() : null };
+    return {
+        context: this.context,
+        active: this.active,
+        settings: {
+            provider: this.settings.provider || 'codex',
+            limit: this.settings.limit || 'five_hour',
+            account: this.settings.account || '',
+            label: this.settings.label || ''
+        },
+        usage,
+        fetchedAt: source?.data?.fetchedAt ?? null,
+        stale: Boolean(source && (source.error || (source.data && Date.now() - source.data.fetchedAt > 35 * 60000))),
+        error: source?.error || null
+    };
+};
 AiUsageWidget.prototype.render = function () {
     if (this.destroyed || !this.active) return;
     const source = this.source;

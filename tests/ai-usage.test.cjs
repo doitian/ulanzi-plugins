@@ -68,6 +68,54 @@ test('keys share fetches, retain stale readings, skip inactive renders and relea
     a.destroy(); assert.equal(timers.size, 1);
     b.destroy(); assert.equal(timers.size, 0);
 });
+
+test('instance snapshots select configured usage and retain stale data without fetching', async t => {
+    let calls = 0;
+    let fail = false;
+    const { Widget } = runtime(async () => {
+        calls++;
+        if (fail) throw new Error('private upstream error');
+        return { ok: true, json: async () => ({ ...fixture, fetchedAt: Date.now() }) };
+    });
+    const widget = new Widget('configured-key');
+    t.after(() => widget.destroy());
+    assert.equal(widget.getSnapshot().usage.error, 'Loading...');
+    assert.equal(widget.getSnapshot().fetchedAt, null);
+    widget.updateSettings({ account: 'OLD@example.com', label: 'Work', token: 'private-token' });
+    await widget.source.pending;
+    let snapshot = widget.getSnapshot();
+    assert.equal(snapshot.context, 'configured-key');
+    assert.equal(snapshot.settings.provider, 'codex');
+    assert.equal(snapshot.settings.limit, 'five_hour');
+    assert.equal(snapshot.settings.label, 'Work');
+    assert.equal(snapshot.usage.remaining_percent, 12);
+    assert.equal(snapshot.usage.resets_at, null);
+    assert.equal(snapshot.stale, false);
+    assert.equal(snapshot.error, null);
+    assert.ok(!JSON.stringify(snapshot).includes('private-token'));
+    widget.updateSettings({ account: '', limit: 'five_hour' });
+    snapshot = widget.getSnapshot();
+    assert.equal(snapshot.usage.remaining_percent, 73);
+    assert.equal(snapshot.usage.resets_at, '2099-01-01T00:00:00.000Z');
+    widget.setActive(false);
+    fail = true;
+    await widget.source.refresh(true);
+    snapshot = widget.getSnapshot();
+    assert.equal(snapshot.active, false);
+    assert.equal(snapshot.stale, true);
+    assert.equal(snapshot.error, 'Helper offline');
+    assert.equal(snapshot.usage.remaining_percent, 73);
+    assert.equal(calls, 2);
+    widget.updateSettings({ account: 'missing@example.com' });
+    assert.equal(widget.getSnapshot().usage.error, 'No account');
+    widget.source.error = '';
+    widget.source.data = { providers: { moonshot: { limits: { balance: { remaining_amount: 123.45, currency: 'CNY' } } } }, fetchedAt: Date.now() - 36 * 60000 };
+    widget.updateSettings({ provider: 'moonshot', limit: 'balance', account: '' });
+    snapshot = widget.getSnapshot();
+    assert.equal(snapshot.usage.remaining_amount, 123.45);
+    assert.equal(snapshot.usage.currency, 'CNY');
+    assert.equal(snapshot.stale, true);
+});
 test('press opens provider defaults or an override, including while offline', () => {
     const { Widget, opened } = runtime();
     const widget = new Widget('key');

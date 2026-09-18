@@ -54,6 +54,43 @@ test('Ulanzi launch starts the bridge, renders widgets, and exits with the host'
     assert.notEqual(bridgePort, occupiedPort);
     const health = await fetch('http://127.0.0.1:' + bridgePort + '/health', { headers: { 'X-Ulanzi-Bridge': '1' } });
     assert.equal((await health.json()).service, 'me.iany.ulanzistudio.js.bridge');
+    const instancesUrl = 'http://127.0.0.1:' + bridgePort + '/instances';
+    const readInstances = async () => {
+        const response = await fetch(instancesUrl, { headers: { 'X-Ulanzi-Bridge': '1' } });
+        assert.equal(response.status, 200);
+        assert.match(response.headers.get('content-type'), /application\/json/);
+        return (await response.json()).instances;
+    };
+    const waitForInstances = async predicate => {
+        for (let attempt = 0; attempt < 100; attempt++) {
+            const instances = await readInstances();
+            if (predicate(instances)) return instances;
+            await new Promise(resolve => setTimeout(resolve, 20));
+        }
+        assert.fail('Instance state did not match Ulanzi events');
+    };
+    const initial = await waitForInstances(rows => rows.length === 1 && rows[0].fetchedAt !== null);
+    assert.equal(initial[0].settings.provider, 'codex');
+    assert.equal(initial[0].settings.limit, 'five_hour');
+    assert.equal(initial[0].usage.error, 'CLI login required');
+    assert.equal(initial[0].active, true);
+    assert.equal((await fetch(instancesUrl)).status, 403);
+    assert.equal((await fetch(instancesUrl, { headers: { 'X-Ulanzi-Usage': '1' } })).status, 403);
+    assert.equal((await fetch(instancesUrl, { headers: { 'X-Ulanzi-Bridge': '1', Origin: 'https://example.com' } })).status, 403);
+    const second = { uuid: 'me.iany.ulanzistudio.js.aiUsage', key: 'second', actionid: 'test' };
+    const secondContext = second.uuid + '___second___test';
+    socket.send(JSON.stringify({ cmd: 'add', ...second, param: { provider: 'claude', limit: 'seven_day', label: 'Weekly' } }));
+    const added = await waitForInstances(rows => rows.length === 2);
+    assert.equal(added.find(row => row.context === secondContext).settings.provider, 'claude');
+    socket.send(JSON.stringify({ cmd: 'paramfromapp', ...second, param: { provider: 'xai', limit: 'monthly' } }));
+    socket.send(JSON.stringify({ cmd: 'setactive', ...second, active: false }));
+    const updated = await waitForInstances(rows => rows.some(row => row.context === secondContext && !row.active && row.settings.provider === 'xai'));
+    assert.equal(updated.find(row => row.context === secondContext).settings.limit, 'monthly');
+    socket.send(JSON.stringify({ cmd: 'clear', param: [second] }));
+    const cleared = await waitForInstances(rows => rows.length === 1);
+    assert.equal(cleared[0].context, initial[0].context);
+    socket.send(JSON.stringify({ cmd: 'clear', param: [{ uuid: 'me.iany.ulanzistudio.js.aiUsage', key: 'aiUsage', actionid: 'test' }] }));
+    await waitForInstances(rows => rows.length === 0);
     socket.close();
     assert.equal(await exited, 0);
     await assert.rejects(fetch('http://127.0.0.1:' + bridgePort + '/health'));

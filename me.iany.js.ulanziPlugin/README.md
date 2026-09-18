@@ -157,6 +157,49 @@ Run automated widget, local-helper, and direct-API fixture tests with
 repository root. Tests use synthetic credentials and mocked provider responses;
 live readings require CLI credentials and Ulanzi Studio.
 
+## Configured AI Usage instances API
+
+`GET /instances` on the running plugin's bridge returns the AI Usage buttons
+reported by Ulanzi, including inactive buttons. Cleared buttons are removed.
+This does not enumerate saved profiles that Ulanzi has not loaded. The standalone
+`mise run bridge` server returns an empty list because it has no Ulanzi instances.
+
+Use the port from the startup log (`Widget bridge listening on http://127.0.0.1:<port>`):
+
+```powershell
+Invoke-RestMethod "http://127.0.0.1:<port>/instances" -Headers @{ 'X-Ulanzi-Bridge' = '1' } |
+    ConvertTo-Json -Depth 10
+```
+
+Example response:
+
+```json
+{
+  "instances": [
+    {
+      "context": "me.iany.ulanzistudio.js.aiUsage___key1___action1",
+      "active": true,
+      "settings": { "provider": "codex", "limit": "five_hour", "account": "", "label": "" },
+      "usage": { "remaining_percent": 73, "resets_at": "2026-09-18T12:00:00.000Z" },
+      "fetchedAt": 1789732800000,
+      "stale": false,
+      "error": null
+    }
+  ]
+}
+```
+
+The endpoint reads the same cached usage and account/window selection as each
+button; calling it does not trigger a provider request. Settings include effective
+provider/window defaults, the account filter (blank selects the active account),
+and the custom label. Balance windows return `remaining_amount` and `currency`
+instead of percentage/reset fields. Unavailable readings return `usage.error`,
+including `Loading...` before the first fetch. `fetchedAt` is Unix milliseconds
+or `null` before data arrives; unknown reset times are `null`. `stale` indicates
+a helper error or data older than 35 minutes. The top-level per-instance `error`
+reports a helper failure while any previous reading remains in `usage`.
+An empty configuration returns `{ "instances": [] }`.
+
 ## Adding another widget
 
 Add its action to `manifest.json`, load its isolated runtime module from

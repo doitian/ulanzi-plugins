@@ -75,3 +75,9 @@ function forEachInstance(callback) {
         }
     }
 }
+
+function getAiUsageInstances() {
+    return Object.values(INSTANCES)
+        .filter(instance => instance instanceof AiUsageWidget && !instance.destroyed)
+        .map(instance => instance.getSnapshot());
+}
