@@ -13,6 +13,7 @@ function updateWindows() {
         claude: ['five_hour', 'seven_day', 'seven_day_fable', 'seven_day_sonnet'],
         'opencode-go': ['rolling', 'weekly', 'monthly'],
         xai: ['weekly'],
+        'kimi-code': ['five_hour', 'monthly'],
         moonshot: ['balance'], 'moonshot-cn': ['balance']
     }[provider] || ['five_hour', 'seven_day'];
     for (const option of form.elements.limit.options) option.disabled = !windows.includes(option.value);

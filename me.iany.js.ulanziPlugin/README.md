@@ -34,7 +34,7 @@ root to install the collection.
 
 ### AI Usage
 
-Shows Claude, Codex, or xAI (Grok) **remaining** usage percentage, or Moonshot account balance.
+Shows Claude, Codex, xAI (Grok), or Kimi Code **remaining** usage percentage, or Moonshot account balance.
 Matches the reference layout: label at top left, provider icon at top right,
 large value in the center, and reset duration or balance decimals at the bottom. Add separate keys for the 5-hour and 7-day windows.
 Claude also supports `seven_day_fable` and `seven_day_sonnet` when returned
@@ -48,7 +48,7 @@ HTTP server for all widgets and renders their icons using Canvas. The property
 inspectors remain HTML.
 
 1. Install Node.js 18+ and sign in with your provider's CLI (`codex login`,
-   `grok login`, or `/login` inside Claude Code). The helper uses the active CLI account only.
+   `grok login`, or `/login` inside Claude Code or Kimi CLI). The helper uses the active CLI account only.
 2. Run `mise run install` on Windows, then restart Ulanzi Studio. The host starts
    the plugin and its shared server automatically. Installation removes the old
    Windows Startup shortcut and stops the legacy standalone server. No sign-in
@@ -78,6 +78,7 @@ and also request a forced usage refresh. Refreshes share the existing
 | Claude | `https://claude.ai/new#settings/usage` |
 | Codex | `https://chatgpt.com/#settings/Usage` |
 | OpenCode Go | `https://opencode.ai/go` |
+| Kimi Code | `https://www.kimi.com/code/console` |
 | xAI (Grok) | `https://grok.com/?_s=usage` |
 | Moonshot / Moonshot China | `https://platform.kimi.com/console/account` |
 
@@ -92,6 +93,24 @@ to override the exact file path. The helper calls
 `https://cli-chat-proxy.grok.com/v1/billing?format=credits` and shows the remaining
 percentage and reset time for the current SuperGrok week. Near-expiry access tokens
 are refreshed with the Grok CLI refresh token.
+
+For **Kimi Code**, select **5 hours** or **Monthly**. The helper calls
+`https://api.kimi.com/coding/v1/usages` (override with `KIMI_CODE_BASE_URL`) and shows
+the remaining percentage and reset time of the plan's 5-hour and monthly quotas plus
+any windowed limits returned for it. Credentials are resolved in order:
+
+1. Kimi CLI OAuth tokens from `/login` inside Kimi CLI, stored in
+   `~/.kimi/credentials/kimi-code.json` (`KIMI_SHARE_DIR` is respected; set
+   `ULANZI_KIMI_CODE_CREDENTIALS` to override the exact file path).
+2. pi's `kimi-coding` OAuth entry in `~/.pi/agent/auth.json` (`PI_CODING_AGENT_DIR`
+   is respected; set `ULANZI_PI_AUTH` to override the exact file path).
+3. A `kimi-code-plan-cn` or `kimi-code-plan-global` API key saved by OpenCode
+   `/connect`. The global entry calls `https://api.kimi.ai/coding/v1` instead.
+
+Near-expiry OAuth tokens are refreshed against `https://auth.kimi.com/api/oauth/token`
+(sending the `~/.kimi/device_id` header when present for Kimi CLI credentials) and
+written back atomically, preserving unrelated entries in the same file. API-key
+credentials cannot be refreshed; rotate them in OpenCode when they expire.
 
 For **OpenCode Go**, select **Rolling (5 hours)**, **Weekly**, or **Monthly**.
 Credentials come from the `opencode-go` API entry created by OpenCode `/connect`,
@@ -122,9 +141,9 @@ and `.345`. CNY is green from ¥70, yellow from ¥36, otherwise red; USD is gree
 from $12, yellow from $6, otherwise red. Negative balances display as zero.
 
 Credential files default to `~/.codex/auth.json`,
-`~/.claude/.credentials.json`, and `~/.grok/auth.json` (`~` is your user directory, including on Windows).
-`CODEX_HOME`, `CLAUDE_CONFIG_DIR`, and `GROK_HOME` are respected. Set
-`ULANZI_CODEX_CREDENTIALS`, `ULANZI_CLAUDE_CREDENTIALS`, or `ULANZI_GROK_CREDENTIALS` in the helper environment
+`~/.claude/.credentials.json`, `~/.grok/auth.json`, and `~/.kimi/credentials/kimi-code.json` (`~` is your user directory, including on Windows).
+`CODEX_HOME`, `CLAUDE_CONFIG_DIR`, `GROK_HOME`, and `KIMI_SHARE_DIR` are respected. Set
+`ULANZI_CODEX_CREDENTIALS`, `ULANZI_CLAUDE_CREDENTIALS`, `ULANZI_GROK_CREDENTIALS`, or `ULANZI_KIMI_CODE_CREDENTIALS` in the helper environment
 to override the exact file path. This version supports file credentials;
 OS-keychain-only logins are not supported. Existing account-email settings act
 as an optional match against the active Codex account, not an account switch.

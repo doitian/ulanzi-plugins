@@ -122,7 +122,7 @@ test('press opens provider defaults or an override, including while offline', ()
     for (const [provider, expected] of Object.entries({
         claude: 'https://claude.ai/new#settings/usage', codex: 'https://chatgpt.com/#settings/Usage',
         'opencode-go': 'https://opencode.ai/go', moonshot: 'https://platform.kimi.com/console/account',
-        'moonshot-cn': 'https://platform.kimi.com/console/account', xai: 'https://grok.com/?_s=usage'
+        'moonshot-cn': 'https://platform.kimi.com/console/account', 'kimi-code': 'https://www.kimi.com/code/console', xai: 'https://grok.com/?_s=usage'
     })) {
         widget.settings = { provider };
         widget.handlePress(); assert.equal(opened.at(-1), expected);

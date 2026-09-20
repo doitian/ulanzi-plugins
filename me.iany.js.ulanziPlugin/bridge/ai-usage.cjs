@@ -23,7 +23,7 @@ function sanitize(data) {
         return result;
     }
     const providers = {};
-    for (const name of ['claude', 'codex', 'opencode-go', 'moonshot', 'moonshot-cn', 'xai']) {
+    for (const name of ['claude', 'codex', 'opencode-go', 'moonshot', 'moonshot-cn', 'xai', 'kimi-code']) {
         const provider = data.providers[name];
         if (!provider || typeof provider !== 'object') continue;
         providers[name] = Array.isArray(provider.accounts)
