@@ -131,20 +131,6 @@ function drawBar(ctx, x, y, width, height, fraction, color) {
         ctx.fillRect(x, y + height - filled, width, filled);
     }
 }
-function drawPie(ctx, x, y, radius, fraction, color) {
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#323232';
-    ctx.fill();
-    if (fraction > 0) {
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.arc(x, y, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, fraction));
-        ctx.closePath();
-        ctx.fillStyle = color;
-        ctx.fill();
-    }
-}
 function drawFit(ctx, text, x, y, size, width) {
     do { ctx.font = size + 'px "Segoe UI", sans-serif'; size--; }
     while (size >= 10 && ctx.measureText(text).width > width);
@@ -246,20 +232,14 @@ AiUsageWidget.prototype.render = function () {
     const display = presentation(usage, stale);
     ctx.textAlign = 'center'; ctx.fillStyle = display.color;
     drawFit(ctx, display.center, 72, 72, 41, 114);
-    const style = this.settings.gauge || 'none';
-    const dials = style === 'none' ? null : gauges(usage, this.settings.limit || 'five_hour');
+    const dials = (this.settings.gauge || 'none') === 'bars' ? gauges(usage, this.settings.limit || 'five_hour') : null;
     ctx.fillStyle = '#b4b4b4';
-    drawFit(ctx, display.footer, 72, 124, 20, dials && style === 'pie' ? 68 : 114);
+    drawFit(ctx, display.footer, 72, 124, 20, 114);
     if (dials) {
         const timeColor = stale ? COLORS.gray : COLORS.blue;
-        if (style === 'bars') {
-            // Start below the label/icon row so the bars never crowd it.
-            drawBar(ctx, 4, 52, 8, 84, dials.usage, display.color);
-            if (dials.time !== null) drawBar(ctx, 132, 52, 8, 84, dials.time, timeColor);
-        } else {
-            drawPie(ctx, 21, 123, 15, dials.usage, display.color);
-            if (dials.time !== null) drawPie(ctx, 123, 123, 15, dials.time, timeColor);
-        }
+        // Start below the label/icon row so the bars never crowd it.
+        drawBar(ctx, 4, 52, 8, 84, dials.usage, display.color);
+        if (dials.time !== null) drawBar(ctx, 132, 52, 8, 84, dials.time, timeColor);
     }
     // Keep a stale indication without replacing the reset/decimal footer.
     if (stale) { ctx.fillStyle = COLORS.gray; ctx.font = '9px "Segoe UI", sans-serif'; ctx.fillText('stale', 72, 103); }

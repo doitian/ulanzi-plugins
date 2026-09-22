@@ -329,7 +329,7 @@ test('gauges cover day windows only and clamp the remaining share of the period'
     assert.equal(Widget.gauges({ remaining: 60 }, 'weekly', now).time, null);
 });
 test('gauge styles draw only when selected, and never for hour windows', async () => {
-    for (const [gauge, limit, arcs, rects] of [['none', 'seven_day', 0, 1], ['pie', 'seven_day', 4, 1], ['bars', 'seven_day', 0, 5], ['bars', 'five_hour', 0, 1]]) {
+    for (const [gauge, limit, arcs, rects] of [['none', 'seven_day', 0, 1], ['pie', 'seven_day', 0, 1], ['bars', 'seven_day', 0, 5], ['bars', 'five_hour', 0, 1]]) {
         const limits = { five_hour: { remaining_percent: 73, resets_at: '2099-01-01T00:00:00Z' }, seven_day: { remaining_percent: 40, resets_at: '2099-01-01T00:00:00Z' } };
         const { Widget, shapes } = runtime(async () => ({ ok: true, json: async () => ({ providers: { codex: { accounts: [{ active: true, limits }] } }, fetchedAt: Date.now() }) }));
         const widget = new Widget('gauge');
