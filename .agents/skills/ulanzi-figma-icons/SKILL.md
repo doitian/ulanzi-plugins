@@ -11,8 +11,21 @@ The user maintains this page specifically for creating Ulanzi icons:
 [Ulanzi icon page](https://www.figma.com/design/YbUNFaHctftbf0ji4w5b5I/Ulanzi?node-id=677-82).
 
 - File key: `YbUNFaHctftbf0ji4w5b5I`.
-- Page ID: `677:82`.
-- Existing `Default` icon grid: `678:77`.
+- Page ID: `677:82`, named `Ulanzi Studio`.
+
+The page holds **several grids**, not one. Pick the grid matching the icon's context and fall back to `Default` for general Ulanzi Studio actions:
+
+| Grid | ID | Holds |
+|---|---|---|
+| `Default` | `678:77` | general actions and folders; 5 columns |
+| `Wheels` | `683:30` | dial/encoder actions; 3 columns |
+| `Apps` | `685:25` | desktop app launchers |
+| `Web Apps` | `702:236` | browser targets |
+| `Terminal Apps` | `732:91` | terminal actions |
+| `Manning`, `Figma`, `Affinity Photo` | `678:46`, `749:88`, `694:112` | per-app action sets |
+| `Widget Window` | `731:53` | tab artwork, **not** 32x32 slots — the rules below don't apply |
+
+App-specific grids open with a `go-up` icon; keep it first when appending.
 
 Use this destination for Ulanzi icon requests unless the user specifies another destination. Inspect the current page and grid before editing; IDs and layout may change. Use the available `figma-use` skill for Figma API operations.
 
@@ -30,6 +43,8 @@ For folder icons, reuse the existing folder silhouette and place a compact seman
 
 Corner accents must be compact solid shapes, such as the sparkle on `ai-usage-stats-folder` or the triangle on `macro-play`. A stroked path with several direction changes packed into roughly 10 px collapses into a colored smudge at 32x32, however clean it looks zoomed in. Simple wide arcs, as on `voice-input`, are the exception that survives.
 
+An addon that needs a backing shape uses two siblings, as on `macro-play`: `play-background` behind `play-addon`, so the accent stays legible over busy artwork. `voice-input-hold-to-talk` shows the plain single-shape form.
+
 ## Required dimensions and padding
 
 Keep every icon in a **32x32 outer slot**. Choose its internal structure by icon type:
@@ -38,7 +53,9 @@ Keep every icon in a **32x32 outer slot**. Choose its internal structure by icon
 - **Folder icons also use a centered 24x24 inner frame at x=4, y=4**. Keep the folder artwork and its semantic details in that frame, following existing folder silhouettes, scale, and alignment. Apply the addon rule below when a folder has a separate corner addon.
 - **Icons with addons, such as macro-play:** put only the **main icon** in the centered 24x24 frame. Place the corner addon and any backing shape as separate overlay siblings in the 32x32 slot. **The addon may extend beyond the 24x24 main frame**; keep it within the outer slot and optically aligned with the main icon. Do not shrink the whole composition to fit the main frame or clip the addon at that frame's edge.
 
-For ordinary icons, use a transparent fixed 32x32 auto-layout slot with 4 px padding and a fixed 24x24 inner frame. Addons can use absolute positioning within that slot. Folder slots use the same centered 24x24 inner frame as other icons. Name the outer slot for the action, the main frame `icon`, and addons descriptively, such as `play-addon`.
+For ordinary icons, use a transparent fixed 32x32 auto-layout slot with 4 px padding and a fixed 24x24 inner frame. Addons can use absolute positioning within that slot. Folder slots use the same centered 24x24 inner frame as other icons. Name the outer slot for the action, the main frame `icon`, and addons descriptively, such as `play-addon` or `hold-gesture-addon`.
+
+Older slots hold a full-bleed 32x32 vector named `bound` alongside the artwork, used as a spacer before the slot itself was a fixed frame. The newer icons (`macro-play`, `voice-input`, `voice-input-hold-to-talk`, `ai-usage-stats-folder`, `coding-agent-monitor-profile`) omit it. Do not add `bound` to new work, and leave it in place when editing an older icon that has one — deleting it collapses that slot's layout.
 
 Size and align the artwork after adding its frame. Compare its optical size with neighboring icons; do not retain unnecessary padding from a 32x32 SVG viewBox when fitting the main artwork into 24x24. Preserve proportions, stroke weight, and visual consistency.
 
@@ -48,6 +65,6 @@ Add a PNG export preset to every created or edited icon's **outer 32x32 slot**, 
 
 ## Placement and verification
 
-Append to the next available grid slot, preserving existing order and spacing. The observed grid has five columns and 12 px gaps, with wrapping enabled; inspect its live settings rather than rebuilding it. Allow the grid to grow for a new row.
+Append to the next available slot in the **grid that matches the icon's context**, preserving existing order and spacing. `Default` wraps at five columns with 12 px gaps and 12 px padding, giving a 44 px pitch; `Wheels` wraps at three. Inspect the target grid's live settings rather than rebuilding it, and allow it to grow for a new row.
 
 After editing, verify the 32x32 slot and the applicable structure: standalone artwork stays in its centered 24x24 frame; folders also have a centered 24x24 frame; addons may cross the main frame edge without clipping while staying within the outer slot. Render the affected grid **at actual size** and compare the result with neighboring icons for consistent size, visual weight, color, and spacing. A zoomed render hides the legibility failures that matter, so judge every icon at 1x; upscale that 1x render with nearest-neighbour sampling to inspect it without inventing detail. When a symbol's readability is uncertain, build the candidates as a temporary off-grid strip, compare them at 1x, then apply the winner and delete the strip. Correct discrepancies before reporting completion. Keep artwork editable and return a direct Figma link to the result.
