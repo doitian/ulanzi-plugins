@@ -1,234 +1,333 @@
 ---
 name: develop-ulanzi-plugin
-description: Develop an Ulanzi Deck plugin (UlanziStudio) — scaffold, manifest, main service, property inspector, icons, events, localization, packaging
+description: Develop an Ulanzi Deck plugin (UlanziStudio) — scaffold, manifest, Node main service, widget modules, shared bridge server, property inspector, icons, events, localization, testing, packaging
 ---
 
 Develop a plugin for UlanziStudio's programmable macro keypad (Ulanzi Deck) using the official Ulanzi JS Plugin Development Protocol V2.1.2.
 
 Use this skill when the user asks to create, modify, debug, or package an Ulanzi Deck plugin (folders ending in `.ulanziPlugin`).
 
-Reference plugin in this repo: `me.iany.clashTraffic.ulanziPlugin/` — a complete working example (HTML main service + Canvas-rendered key icon + WebSocket data source + property inspector + i18n + per-state offline icon).
+Reference plugin in this repo: `me.iany.js.ulanziPlugin/` — a single plugin hosting **multiple widgets** (Clash Traffic, AI Usage, Agent Status) behind one Node main service, one shared HTTP bridge, and per-action property inspectors.
 
-## 1. Plugin Layout
+## 1. Repo Layout
 
 ```
-{author}.{plugin}.ulanziPlugin/
-├── manifest.json              # required
-├── en.json / zh_CN.json       # optional localization
-├── README.md
-├── resources/                 # icons (svg/png/jpg), gifs
-├── libs/                      # SDK (copy from common-html or common-node)
-│   ├── css/uspi.css           # property inspector styles
-│   └── js/{constants,eventEmitter,timers,utils,ulanziApi}.js
-├── plugin/                    # main service
-│   ├── app.html               # HTML main service entry
-│   └── app.js                 # logic (loaded by app.html)
-└── property-inspector/
-    └── {action}/
+ulanzi-plugins/
+├── mise.toml                      # install / bridge tasks
+├── scripts/install-js.ps1         # deps + copy into %APPDATA%\Ulanzi\UlanziDeck\Plugins
+├── tests/*.test.cjs               # node --test
+└── me.iany.js.ulanziPlugin/
+    ├── manifest.json
+    ├── package.json               # ws + @napi-rs/canvas (pinned)
+    ├── node_modules/              # shipped with the plugin (gitignored)
+    ├── en.json / zh_CN.json
+    ├── README.md
+    ├── resources/
+    │   ├── icon.svg               # plugin + category icon
+    │   └── {action}/              # per-action icons (action-icon.svg, offline.svg, ...)
+    ├── libs/
+    │   ├── css/uspi.css           # property inspector styles
+    │   ├── assets/                # uspi.css control glyphs
+    │   ├── js/                    # browser SDK (PI + HTML preview)
+    │   └── node-sdk/              # vendored plugin-common-node (Apache-2.0, ESM)
+    ├── plugin/
+    │   ├── main.js                # CodePath — Node entry, launched by Ulanzi
+    │   ├── node-runtime.cjs       # vm sandbox giving widgets Canvas/Image/timers
+    │   ├── app.js                 # event router + widget registry
+    │   ├── app.html               # browser preview of the same app.js + widgets
+    │   └── widgets/{widget}.js    # one module per action, dual-target
+    ├── bridge/
+    │   ├── server.cjs             # one HTTP server for all widgets
+    │   └── {widget}.cjs           # route factories (ai-usage, agent-status, ...)
+    └── property-inspector/{action}/
         ├── inspector.html
         └── inspector.js
 ```
 
+New widgets are added to this plugin rather than spun up as new `.ulanziPlugin` folders — they share the service, the bridge port, and the install task.
+
 ## 2. UUID & Naming Rules (strict)
 
-- Folder: `{namespace}.{plugin}.ulanziPlugin` (e.g. `me.iany.clashTraffic.ulanziPlugin`)
-- Plugin UUID: **exactly 4 dot-segments** — `{ns1}.{ns2}.{ns3}.{plugin}` (e.g. `me.iany.ulanzistudio.clashTraffic`)
-- Action UUID: **5+ segments** — `{pluginUUID}.{action}` (e.g. `me.iany.ulanzistudio.clashTraffic.traffic`)
-- The SDK distinguishes main service vs. property inspector by counting UUID segments (`ulanziApi.js:42`). Get this wrong and runtime breaks silently.
+- Folder: `{ns}.{ns}.{plugin}.ulanziPlugin` (e.g. `me.iany.js.ulanziPlugin`)
+- Plugin UUID: **exactly 4 dot-segments** — `me.iany.ulanzistudio.js`
+- Action UUID: **5+ segments** — `{pluginUUID}.{action}` (e.g. `me.iany.ulanzistudio.js.aiUsage`)
+- The browser SDK distinguishes main service from property inspector by counting UUID segments (`libs/js/ulanziApi.js:42`). Get this wrong and runtime breaks silently.
 
 ## 3. manifest.json
 
-Required top-level fields: `Author`, `Name`, `Icon`, `Version`, `CodePath`, `Type` (always `"JavaScript"`), `UUID`, `Actions`.
+Top-level: `Author`, `Name`, `Description`, `Icon`, `Version`, `Category`, `CategoryIcon`, `CodePath`, `Type` (`"JavaScript"`), `UUID`, `Actions`, `OS`, `Software.MinVersion`.
 
-Required action fields: `Name`, `Icon`, `States` (array, each `{Name, Image}`), `UUID`, `Controllers`.
+`CodePath` is `plugin/main.js` — the Node entry. Ulanzi runs it with its bundled Node runtime and passes `host port lang` as argv.
+
+Per action: `Name`, `Icon`, `PropertyInspectorPath`, `state`, `States` (array of `{Name, Image}`), `Tooltip`, `UUID`, `Controllers`, `Devices`.
 
 Useful flags:
 
-- `PrivateAPI: true` — opt into private APIs.
-- `DisableAutomaticStates: true` — prevent host from auto-toggling state on press; use when plugin owns state visualization (e.g. dynamic icons via Canvas).
+- `PrivateAPI: true` — opt into private APIs (set at top level here).
+- `DisableAutomaticStates: true` — stop the host toggling state on press; required when the widget owns its visuals via Canvas.
 - `SupportedInMultiActions: false` — exclude from multi-action composition.
-- `Devices: []` — all devices. `["D200X"]` whitelist. `["~Dial"]` blacklist Dial. Models: `D200`, `D200H`, `Dial`, `D200X`.
+- `Devices: []` — all devices. `["D200X"]` whitelist, `["~Dial"]` blacklist. Models: `D200`, `D200H`, `Dial`, `D200X`.
 - `Controllers: ["Keypad"]` and/or `["Encoder"]` (rotary dial on D200X/Dial).
-- `OS`, `Software.MinVersion`, `ApplicationsToMonitor`, `Profiles`, `InstallToDepsApp` — see `references/manifest.md` if needed.
+- `OS: [{Platform, MinimumVersion}]` for `windows` / `mac`.
 
-For Encoder actions, add `Encoder: { layout: "$UA1" }` (icon+text) or `"$UA2"` (text+text), or a custom `layout.json` (canvas 126×140).
+For Encoder actions add `Encoder: { layout: "$UA1" }` (icon+text) or `"$UA2"` (text+text), or a custom `layout.json` (canvas 126×140).
 
-## 4. Main Service — HTML (recommended for UI/Canvas-heavy plugins)
+## 4. Main Service — Node entry (`plugin/main.js`)
 
-`plugin/app.html` loads the SDK in order, then your script:
-
-```html
-<script src="../libs/js/constants.js"></script>
-<script src="../libs/js/eventEmitter.js"></script>
-<script src="../libs/js/timers.js"></script>
-<script src="../libs/js/utils.js"></script>
-<script src="../libs/js/ulanziApi.js"></script>
-<script src="./app.js"></script>
-```
-
-`plugin/app.js` skeleton:
+`main.js` is CommonJS and dynamically imports the ESM SDK. It owns the process lifetime: start the bridge **before** accepting widget events, and tear everything down when Ulanzi disconnects.
 
 ```js
-const PLUGIN_UUID = 'me.iany.ulanzistudio.myplugin';
+const { createServer, createRoutes } = require('../bridge/server.cjs');
+const { loadWidgets } = require('./node-runtime.cjs');
+
+async function main() {
+    const { default: UlanziApi } = await import('../libs/node-sdk/index.js');
+    const api = new UlanziApi();
+    let runtime;
+    const server = createServer({ routes: createRoutes({ getInstances: () => runtime ? runtime.getInstances() : [] }) });
+    await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', resolve);   // OS picks the port
+    });
+    const bridgeUrl = 'http://127.0.0.1:' + server.address().port;
+    console.info('Widget bridge listening on ' + bridgeUrl);
+    api.onClose(stop);
+    api.onError(() => {});   // the SDK emits EventEmitter's special error event
+    process.once('SIGINT', stop);
+    process.once('SIGTERM', stop);
+    runtime = loadWidgets(api, bridgeUrl);
+}
+```
+
+Port is **allocated by the OS and handed to widgets**, not configured. There is no `RandomPort`/`ws-port.js` step.
+
+`api.onError(() => {})` is mandatory — an unhandled `error` event on an EventEmitter throws and kills the plugin.
+
+### node-runtime.cjs
+
+Widget modules are plain browser-style scripts. `loadWidgets` runs them in a `vm` context that supplies the browser globals they expect, so the **same files** serve the Node service and the HTML preview:
+
+- `document.createElement('canvas')` → `@napi-rs/canvas` `createCanvas(144, 144)`
+- `Image` → subclass reading from disk via `fs.readFileSync` on `src`
+- `WebSocket` (`ws`), `fetch`, `URL`, `AbortController`, `console`
+- tracked `setTimeout`/`setInterval` so `dispose()` can clear every outstanding timer
+- `ULANZI_BRIDGE_URL`, `$UD`, and `window` aliased to the context itself
+
+Load order matters: widget modules first, then `app.js`. Anything the runtime needs to reach (`getInstances`, `dispose`) is called back into the context with `vm.runInContext`.
+
+## 5. Event Router & Widget Registry (`plugin/app.js`)
+
+One router owns all Ulanzi events and dispatches to per-context widget instances, keyed by action UUID:
+
+```js
+const PLUGIN_UUID = 'me.iany.ulanzistudio.js';
+const WIDGETS = {
+    'me.iany.ulanzistudio.js.clashTraffic': ClashTrafficWidget,
+    'me.iany.ulanzistudio.js.aiUsage': AiUsageWidget,
+    'me.iany.ulanzistudio.js.agentStatus': AgentStatusWidget
+};
+const INSTANCES = {};
 
 $UD.connect(PLUGIN_UUID);
 
-const INSTANCES = {}; // keyed by context
-
-$UD.onConnected(() => {});
-
 $UD.onAdd((jsn) => {
-  // jsn.context is unique per key instance
-  if (!INSTANCES[jsn.context]) INSTANCES[jsn.context] = createInstance(jsn.context);
-  if (jsn.param) INSTANCES[jsn.context].update(jsn.param);
+    let instance = INSTANCES[jsn.context];
+    if (!instance) {
+        const Widget = WIDGETS[getActionUuid(jsn)];
+        if (!Widget) return;
+        instance = INSTANCES[jsn.context] = new Widget(jsn.context);
+    }
+    instance.updateSettings((jsn && jsn.param) || {});
+    instance.ensureConnected();
 });
 
-$UD.onRun((jsn) => INSTANCES[jsn.context]?.press());
+$UD.onConnected(() => forEachInstance(i => { i.ensureConnected(); i.render(); }));
 $UD.onSetActive((jsn) => INSTANCES[jsn.context]?.setActive(jsn.active));
-$UD.onParamFromApp((jsn) => jsn.param && INSTANCES[jsn.context]?.update(jsn.param));
-$UD.onParamFromPlugin((jsn) => jsn.param && INSTANCES[jsn.context]?.update(jsn.param));
+$UD.onRun((jsn) => INSTANCES[jsn.context]?.handlePress());
+$UD.onParamFromApp(updateInstance);
+$UD.onParamFromPlugin(updateInstance);
 
 $UD.onClear((jsn) => {
-  // NOTE: clear payload is array; context lives on each item
-  for (const item of jsn.param || []) {
-    INSTANCES[item.context]?.destroy();
-    delete INSTANCES[item.context];
-  }
+    for (const item of jsn.param || []) {   // clear payload is an array
+        INSTANCES[item.context]?.destroy();
+        delete INSTANCES[item.context];
+    }
 });
 ```
 
-## 5. Main Service — Node.js (for system/file/network access beyond browser sandbox)
+`getActionUuid` prefers `jsn.uuid` and falls back to `context.split('___')[0]`.
+
+`onConnected` re-renders existing instances — the host can restart the socket while the plugin process survives.
+
+### Widget module contract
+
+Each `plugin/widgets/{widget}.js` is an IIFE exporting its constructor on `window`, implementing:
+
+| Member | Responsibility |
+|---|---|
+| `constructor(context)` | allocate canvas, timers; initial `render()` |
+| `updateSettings(settings)` | merge, detect meaningful changes, restart connections/timers |
+| `ensureConnected()` | idempotent; reconnect only if the socket is missing or not OPEN/CONNECTING |
+| `setActive(active)` | `active` arrives as a string — compare `active.toString() === 'true'` |
+| `handlePress()` | `$UD.openUrl(url, false, null, this.context)` |
+| `render()` | no-op when inactive; push icon via `$UD` |
+| `destroy()` | set `destroyed`, close sockets, clear every timer |
+
+Optional `getSnapshot()` exposes instance state to bridge routes (see `/usage/fetch`).
+
+## 6. Shared Bridge Server (`bridge/`)
+
+Widgets needing filesystem, credentials, or outbound HTTPS use **one** server. Never call `listen()` from a widget.
+
+Add a route factory in `bridge/{widget}.cjs` and register it in `createRoutes()`:
 
 ```js
-import UlanziApi, { Utils, RandomPort } from './plugin-common-node/index.js';
-const $UD = new UlanziApi();
-new RandomPort().getPort(); // writes ws-port.js so PI can find the port
-$UD.connect('me.iany.ulanzistudio.myplugin');
+function createRoutes({ getInstances = () => [], usageRoute = createUsageRoute(), agentsRoute = createAgentsRoute() } = {}) {
+    return new Map([
+        ['/health', async () => ({ service: 'me.iany.ulanzistudio.js.bridge' })],
+        ['/usage/fetch', () => ({ instances: getInstances() })],
+        ['/usage', usageRoute],
+        ['/usage/refresh', url => usageRoute(url, true)],
+        ['/agents', agentsRoute]
+    ]);
+}
 ```
 
-Same event API as HTML. Set `manifest.json` `CodePath` to `plugin/app.js`. For debugging add `"Inspect": "--inspect=127.0.0.1:9201"` (unique port per plugin) and launch host with `--nodeRemoteDebug`.
+Handlers receive the parsed `URL` and return JSON (or a promise). The server owns routing, CORS, validation, and errors. Each factory owns its own cache.
 
-## 6. Property Inspector
+Hardening the server already applies, and new routes inherit it:
 
-`property-inspector/{action}/inspector.html`:
+- reject unless `Host` is `127.0.0.1:{port}`; reject non-`null` cross origins (HTML plugins have opaque `file` origins)
+- require `X-Ulanzi-Bridge: 1`
+- method is `GET` except `POST` for explicit refresh routes; `OPTIONS` returns 204
+- handler throw → 503 with a generic message; secrets never reach responses or logs
 
-```html
-<link rel="stylesheet" href="../../libs/css/uspi.css">
-<div class="uspi-wrapper hidden">
-  <form id="property-inspector">
-    <div class="uspi-item">
-      <div class="uspi-item-label" data-localize>WebSocket URL</div>
-      <input type="text" class="uspi-item-value" name="wsUrl" placeholder="ws://...">
-    </div>
-  </form>
-</div>
-<script src="../../libs/js/constants.js"></script>
-<!-- ...same SDK includes as app.html... -->
-<script src="./inspector.js"></script>
-```
+Clients call `(window.ULANZI_BRIDGE_URL || 'http://127.0.0.1:18765') + '/route'` — the fallback port is the standalone `mise run bridge` server used for HTML preview.
 
-`inspector.js`:
+## 7. Property Inspector
+
+`property-inspector/{action}/inspector.html` links `libs/css/uspi.css`, wraps the form in `.uspi-wrapper hidden`, then loads the five browser SDK scripts before `inspector.js`.
 
 ```js
+let settings = {};
 let form;
-$UD.connect(); // PI gets uuid from query string
+
+$UD.connect();   // PI takes its uuid from the query string — pass no argument
+
 $UD.onConnected(() => {
-  form = document.querySelector('#property-inspector');
-  document.querySelector('.uspi-wrapper').classList.remove('hidden');
-  form.addEventListener('input', Utils.debounce(() => {
-    $UD.sendParamFromPlugin(Utils.getFormValue(form));
-  }));
+    form = document.querySelector('#property-inspector');
+    applySettings();
+    document.querySelector('.uspi-wrapper').classList.remove('hidden');
+    if (form.dataset.bound) return;
+    form.dataset.bound = 'true';
+    form.addEventListener('input', Utils.debounce(() => {
+        settings = Utils.getFormValue(form);
+        $UD.sendParamFromPlugin(settings);
+    }));
 });
-$UD.onAdd((jsn) => jsn.param && Utils.setFormValue(jsn.param, form));
-$UD.onParamFromApp((jsn) => jsn.param && Utils.setFormValue(jsn.param, form));
+
+function receive(jsn) {
+    if (!jsn || !jsn.param) return;
+    settings = Object.assign({}, jsn.param);
+    applySettings();
+}
+$UD.onAdd(receive);
+$UD.onParamFromApp(receive);
 ```
 
 Conventions:
 
-- Wrap content in `.uspi-wrapper` (auto i18n + styling). Initially hidden, revealed `onConnected` to avoid FOUC.
-- `name` attributes on inputs map directly to settings keys.
-- Use `Utils.debounce` on `input` to avoid spamming the host.
-- Send via `sendParamFromPlugin` (not `setSettings`) — host persists settings only when active and propagates back through `paramfromapp`.
+- Keep defaults in `applySettings` via `Object.assign({...defaults}, settings)` so a fresh key renders populated.
+- `onConnected` can fire more than once — guard listener binding (`form.dataset.bound`).
+- `name` attributes map directly to settings keys.
+- Strip settings the plugin no longer honors when receiving (e.g. a retired `helperUrl`).
+- Dependent dropdowns: disable invalid `<option>`s and coerce the value on `input` (see the AI Usage provider→window map).
+- Send via `sendParamFromPlugin`, not `setSettings` — the host persists and echoes back through `paramfromapp`.
 
-## 7. Setting Icons
+## 8. Setting Icons
 
-The host doesn't auto-render Canvas. From the main service, push icons via `$UD`:
+The host doesn't auto-render Canvas. Push from the main service:
 
 | API | Use |
 |---|---|
-| `$UD.setStateIcon(context, stateIndex, text?)` | Switch to a state from manifest `States` |
-| `$UD.setPathIcon(context, 'resources/x.svg', text?)` | Local file (paths relative to plugin root) |
-| `$UD.setBaseDataIcon(context, 'data:image/png;base64,...', text?)` | Dynamic Canvas → `canvas.toDataURL('image/png')` |
+| `$UD.setStateIcon(context, stateIndex, text?)` | Switch to a manifest `States` entry |
+| `$UD.setPathIcon(context, 'resources/x/y.svg', text?)` | Local file, path relative to plugin root |
+| `$UD.setBaseDataIcon(context, canvas.toDataURL('image/png'), text?)` | Dynamic Canvas |
 | `$UD.setGifPathIcon(context, 'anim.gif', text?)` / `setGifDataIcon` | Animated |
 
-For Canvas-rendered icons use **144×144** (matches device key resolution). Render only when `active`; the host ignores updates for inactive keys but you'll waste CPU.
+Canvas icons are **144×144** (device key resolution). Return early from `render()` when inactive — the host ignores updates for inactive keys.
 
-## 8. Settings Persistence
+## 9. Settings Persistence
 
 - `setSettings(data, context)` / `getSettings(context)` — per-action; **only saves while active**.
 - `setGlobalSettings(data)` / `getGlobalSettings()` — plugin-wide.
-- Receive via `onDidReceiveSettings` / `onDidReceiveGlobalSettings`.
-- The PI flow above (`sendParamFromPlugin` ↔ `onParamFromApp`) is the host-managed persistence path and is preferred over manual `setSettings` from the PI.
+- Prefer the `sendParamFromPlugin` ↔ `onParamFromApp` flow; it is the host-managed path.
 
-## 9. Event Cheat Sheet
+## 10. Event Cheat Sheet
 
-Lifecycle: `onConnected`, `onAdd`, `onSetActive`, `onClear` (param is array of `{context, ...}`).
+Lifecycle: `onConnected`, `onAdd`, `onSetActive`, `onClear` (param is an array of `{context, ...}`).
 
-Keypad: `onRun` (debounced single-press, primary trigger), `onKeyDown`, `onKeyUp`.
+Keypad: `onRun` (debounced single press, primary trigger), `onKeyDown`, `onKeyUp`.
 
 Encoder: `onDialDown`, `onDialUp`, `onDialRotate` (`message.rotateEvent` ∈ `left|right|hold-left|hold-right`), plus `onDialRotate{Left,Right,HoldLeft,HoldRight}`.
 
-Cross-page (pass-through, not persisted by host):
+Node service only: `onClose`, `onError`.
+
+Cross-page (pass-through, not persisted):
 - Main → PI: `$UD.sendToPropertyInspector(data, context)` → PI `onSendToPropertyInspector`
 - PI → Main: `$UD.sendToPlugin(data)` → Main `onSendToPlugin`
 
-System: `toast(msg)`, `hotkey('Ctrl+C')`, `openUrl(url)`, `openView(html, w, h)`, `selectFileDialog(filter)`, `selectFolderDialog()`, `logMessage(msg, level)`, `showAlert(context)`.
+System: `toast(msg)`, `hotkey('Ctrl+C')`, `openUrl(url, local, param, context)`, `openView(html, w, h)`, `selectFileDialog(filter)`, `selectFolderDialog()`, `logMessage(msg, level)`, `showAlert(context)`.
 
 `context` decoding: `$UD.decodeContext(ctx) → { uuid, key, actionid }`. Format: `uuid___key___actionid`.
 
-## 10. Localization
+## 11. Localization
 
-Place `{lang}.json` in plugin root. Supported: `en`, `zh_CN`, `zh_HK`, `ja_JP`, `de_DE`, `ko_KR`, `pt_PT`, `es_ES`.
+Place `{lang}.json` in the plugin root. Supported: `en`, `zh_CN`, `zh_HK`, `ja_JP`, `de_DE`, `ko_KR`, `pt_PT`, `es_ES`.
 
 ```json
 {
-  "Name": "My Plugin",
+  "Name": "iany's JS Widgets",
   "Description": "...",
-  "Actions": [{ "Name": "...", "Tooltip": "..." }],
+  "Actions": [{ "Name": "AI Usage", "Tooltip": "..." }],
   "Localization": { "WebSocket URL": "WebSocket 地址" }
 }
 ```
 
-In PI HTML use `data-localize` (translates `textContent`, `placeholder`, `title`, `label`). The SDK auto-runs on `.uspi-wrapper`/`.udpi-wrapper` after connect. In JS use `$UD.t('key')`.
+`Actions` is positional — it must match `manifest.json` order. Every `data-localize` string in every inspector needs a `Localization` entry, including `<option>` labels.
 
-## 11. Reconnection & Long-Running Connections
+In PI HTML use `data-localize` (translates `textContent`, `placeholder`, `title`, `label`); the SDK runs it on `.uspi-wrapper` after connect. In JS use `$UD.t('key')`.
 
-When opening external sockets (e.g. WebSocket data sources), implement exponential backoff and tear down on `onClear`. Pattern from the reference plugin:
+## 12. Long-Running Connections
+
+Exponential backoff plus a staleness watchdog — `readyState` lags a silently dropped TCP connection (host restarts, sleep/resume):
 
 ```js
-scheduleReconnect() {
-  if (this.destroyed || this.reconnectTimer) return;
-  this.reconnectTimer = setTimeout(() => {
-    this.reconnectTimer = null;
-    this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
-    this.connect();
-  }, this.reconnectDelay);
-}
+Widget.prototype.scheduleReconnect = function () {
+    if (this.destroyed || this.reconnectTimer) return;
+    this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
+        this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
+        this.connectWs();
+    }, this.reconnectDelay);
+};
+
+Widget.prototype.checkStale = function () {
+    if (this.destroyed || !this.connected || !this.lastMessageAt) return;
+    if (Date.now() - this.lastMessageAt < STALE_TIMEOUT_MS) return;
+    this.connectWs();
+};
 ```
 
-Always null out socket handlers before `close()` to avoid recursive reconnects.
+Null out `onopen`/`onmessage`/`onerror`/`onclose` before `close()` so teardown doesn't recurse into reconnect. Reset `reconnectDelay` on a successful open and in `ensureConnected`.
 
-## 12. Testing
-
-**Simulator** (no host app needed):
+## 13. Testing
 
 ```bash
-cd UlanziDeckSimulator && npm install && npm start
-# copy plugin folder into UlanziDeckSimulator/plugins/
-# open http://127.0.0.1:39069 → click "Refresh Plugin List"
+node --test tests/*.test.cjs        # from the repo root
 ```
 
-Limitations: `openUrl`/`openView` can't open local files; Node.js main services must be started manually (`node plugin/app.js`); right-click a key to manually fire events.
+`tests/plugin-lifecycle.test.cjs` spawns `plugin/main.js` against a stub `WebSocketServer`, scrapes the allocated port from stdout, and asserts clean exit. Point `ULANZI_*_CREDENTIALS` at missing files and blank the API-key env vars so tests never touch real accounts; mock provider responses.
 
 **Desktop debug flags:**
 
@@ -236,34 +335,48 @@ Limitations: `openUrl`/`openView` can't open local files; Node.js main services 
 |---|---|
 | `--log` + `--logLevel` | File logs |
 | `--webRemoteDebug` | HTML plugins debuggable at `http://localhost:9292` |
-| `--nodeRemoteDebug` | Node plugins via `chrome://inspect` |
+| `--nodeRemoteDebug` | Node plugins via `chrome://inspect` (add `"Inspect": "--inspect=127.0.0.1:9201"` to the manifest) |
 
-Windows: append flags to shortcut Target. macOS: `open /Applications/Ulanzi\ Studio.app --args --webRemoteDebug` (note: `open` may break Accessibility permissions; prefer running the binary directly if hotkeys misbehave).
+Windows: append flags to the shortcut Target. macOS: `open /Applications/Ulanzi\ Studio.app --args --webRemoteDebug` (`open` may break Accessibility permissions; prefer the binary directly if hotkeys misbehave).
 
-## 13. Installation / Packaging
+**HTML preview:** `mise run bridge` starts the standalone server on 18765, then open `plugin/app.html`. The external UlanziDeckSimulator also works but can't open local files via `openUrl`/`openView` and won't launch a Node main service for you.
 
-Copy the `*.ulanziPlugin/` folder into the host's plugins directory and restart UlanziStudio (or refresh in the simulator). No build step required for plain JS/HTML plugins.
+## 14. Installation / Packaging
 
-## 14. Common Pitfalls
+`mise run install` → `scripts/install-js.ps1`, which:
 
-1. **Wrong UUID segment count.** 4 = main service, 5+ = action. The SDK silently picks the wrong role otherwise (`ulanziApi.js:42`).
-2. **Settings dropped while inactive.** `setSettings` is a no-op when the action isn't active; rely on the PI ↔ host ↔ main flow.
-3. **`onClear` payload is an array.** `jsn.param` is `[{context, ...}, ...]` — iterate, don't read `jsn.context`.
-4. **Canvas icons must be base64-encoded.** `canvas.toDataURL('image/png')` then `setBaseDataIcon`.
-5. **Path icons resolve from plugin root**, not the HTML file location. `resources/icon.svg` works from anywhere.
-6. **PI script must include the SDK before the script that calls `$UD.connect()`** — order matters.
-7. **Don't call `$UD.connect(uuid)` in the PI** — pass no argument so it picks UUID from the query string the host injects.
+1. requires Node 18+ on PATH,
+2. runs `npm install --omit=dev --ignore-scripts` in the plugin folder when `@napi-rs/canvas`/`ws` aren't resolvable,
+3. kills only this plugin's `node.exe` processes so native `.node` files can be replaced,
+4. removes and re-copies the folder into `%APPDATA%\Ulanzi\UlanziDeck\Plugins\`.
 
-## 15. Reference Plugin Walkthrough
+`node_modules/` ships with the plugin; `@napi-rs/canvas` is native, so it must match the destination OS/arch. Restart UlanziStudio afterwards.
 
-`me.iany.clashTraffic.ulanziPlugin/` demonstrates:
+See the `install-ulanzi-plugin` skill for registering a new plugin folder as its own mise task.
 
-- HTML main service with per-context state objects (`plugin/app.js:67`).
-- Canvas line chart drawn each WebSocket message, pushed via `setBaseDataIcon` (`plugin/app.js:301`).
-- Fallback to a static SVG via `setPathIcon` when the data source is offline (`plugin/app.js:213`).
-- Settings sync via `sendParamFromPlugin` ↔ `onParamFromApp` (`property-inspector/traffic/inspector.js:18`, `plugin/app.js:53`).
-- Per-state press action (different URL when online vs. offline) using `$UD.openUrl` (`plugin/app.js:186`).
-- Exponential reconnect with full teardown in `onClear` (`plugin/app.js:175`, `plugin/app.js:195`).
-- i18n via `data-localize` plus `en.json` / `zh_CN.json`.
+## 15. Common Pitfalls
 
-When asked to add a new action or new plugin, mirror this structure unless requirements demand Node.js (filesystem, native modules, raw TCP, etc.).
+1. **Wrong UUID segment count.** 4 = main service, 5+ = action (`libs/js/ulanziApi.js:42`).
+2. **`onClear` payload is an array.** Iterate `jsn.param`; there is no `jsn.context`.
+3. **`jsn.active` is a string.** `active.toString() === 'true'`.
+4. **Missing `api.onError`** on the Node service crashes the plugin on the first socket error.
+5. **Widget modules must not create servers or call `listen()`** — register a bridge route instead.
+6. **New widget = three registrations:** `manifest.json` action, the module in `node-runtime.cjs`'s load list *and* `app.html`, and the action UUID in `app.js`'s `WIDGETS`.
+7. **Settings dropped while inactive.** `setSettings` is a no-op when the action isn't active.
+8. **Path icons resolve from the plugin root**, not the HTML file location.
+9. **PI must load the SDK before the script calling `$UD.connect()`**, and must call `connect()` with no argument.
+10. **`onConnected` can fire repeatedly** — make instance setup and PI listener binding idempotent.
+11. **`en.json` `Actions` is positional**; reordering manifest actions silently mislabels them.
+
+## 16. Adding a Widget — Checklist
+
+1. `manifest.json`: new action with its UUID, `PropertyInspectorPath`, `States`, `DisableAutomaticStates`.
+2. `resources/{widget}/`: `action-icon.svg` plus any state icons.
+3. `plugin/widgets/{widget}.js`: IIFE implementing the contract in §5, exported on `window`.
+4. `plugin/node-runtime.cjs`: add the file to the load list (before `app.js`).
+5. `plugin/app.html`: add the `<script>` for preview parity.
+6. `plugin/app.js`: map the action UUID to the constructor in `WIDGETS`.
+7. `bridge/{widget}.cjs` + `createRoutes()` entry, if it needs host access.
+8. `property-inspector/{widget}/inspector.{html,js}`.
+9. `en.json` / `zh_CN.json`: `Actions` entry in manifest order + every `data-localize` string.
+10. `tests/{widget}.test.cjs`, and README docs.
