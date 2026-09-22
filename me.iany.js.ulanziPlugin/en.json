@@ -9,6 +9,10 @@
     {
       "Name": "AI Usage",
       "Tooltip": "Show AI remaining usage percentage and reset time"
+    },
+    {
+      "Name": "Agent Status",
+      "Tooltip": "Show coding agent session counts by status"
     }
   ],
   "Localization": {
@@ -39,6 +43,11 @@
     "Monthly": "Monthly",
     "Press URL": "Press URL",
     "Leave blank to open the provider's default usage page.": "Leave blank to open the provider's default usage page.",
-    "Usage refreshes automatically. Press to open the page and refresh.": "Usage refreshes automatically. Press to open the page and refresh."
+    "Usage refreshes automatically. Press to open the page and refresh.": "Usage refreshes automatically. Press to open the page and refresh.",
+    "Agent": "Agent",
+    "All agents": "All agents",
+    "All agents sums the sessions of every agent-berth provider.": "All agents sums the sessions of every agent-berth provider.",
+    "Leave blank to only refresh the counts on press.": "Leave blank to only refresh the counts on press.",
+    "Sessions come from agent-berth and refresh every two seconds.": "Sessions come from agent-berth and refresh every two seconds."
   }
 }

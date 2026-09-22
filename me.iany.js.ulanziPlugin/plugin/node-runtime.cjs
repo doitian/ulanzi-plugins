@@ -23,7 +23,7 @@ function loadWidgets(api, bridgeUrl) {
     };
     environment.window = environment;
     const context = vm.createContext(environment);
-    for (const file of ['widgets/clash-traffic.js', 'widgets/ai-usage.js', 'app.js']) {
+    for (const file of ['widgets/clash-traffic.js', 'widgets/ai-usage.js', 'widgets/agent-status.js', 'app.js']) {
         vm.runInContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), context, { filename: file });
     }
     return {

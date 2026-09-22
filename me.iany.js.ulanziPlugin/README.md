@@ -1,7 +1,7 @@
 # iany's JS Widgets — Ulanzi Deck Plugin
 
 A collection of JavaScript widgets that share one Ulanzi Deck plugin service.
-Includes Clash Traffic and AI Usage, with one shared service.
+Includes Clash Traffic, AI Usage, and Agent Status, with one shared service.
 
 ## Widgets
 
@@ -176,6 +176,53 @@ Run automated widget, local-helper, and direct-API fixture tests with
 repository root. Tests use synthetic credentials and mocked provider responses;
 live readings require CLI credentials and Ulanzi Studio.
 
+### Agent Status
+
+Shows how many coding agent sessions are in each state, as tracked by
+agent-berth. It mirrors the badges of `tc002 watch agents` in ulanzi-tc002 on a
+144×144 key: the label at top left, the agent icon at top right, the most urgent
+status as a large glyph next to its session count across the middle, and a bar
+along the bottom with one segment per status.
+
+`agent-berth` owns hooks, session tracking, and pruning; this widget only reads
+its snapshots. Run `agent-berth setup` once to install the provider hooks. The
+plugin's shared service runs `agent-berth stats --json`, so the executable must
+be on the Ulanzi Studio process PATH; set `ULANZI_AGENT_BERTH` to its exact path
+otherwise, and restart Ulanzi Studio to apply it.
+
+Open the Agent Status property inspector to configure:
+
+| Field | Description | Default |
+| --- | --- | --- |
+| **Agent** | Which agent to show, or **All agents** to sum every provider | All agents |
+| **Label** | Overrides the name shown at the top left | _empty_ |
+| **Press URL** | URL opened on key press; blank only refreshes the counts | _empty_ |
+
+**All agents** also sums providers this plugin has no icon for, so a new
+agent-berth provider is counted before the widget knows its name.
+
+The center number is the count of the highest-priority non-empty status
+(**waiting > running > done > idle**) and takes that status's color: waiting is
+orange, running yellow, done blue, and idle green. The glyph beside it names
+that status without a caption: a bang for waiting, a play triangle for running,
+a check for done, and a pause for idle. The bottom bar lights the segment of
+every status that has sessions, in the same order and colors. A selected agent
+with no sessions shows a green pause and `0`.
+
+| agent-berth status | Meaning |
+| --- | --- |
+| `waiting` | Permission, question, or elicitation needs input |
+| `running` | Running a turn or known background work |
+| `done` | The tracked turn finished |
+| `idle` | Discovered presence without a running turn |
+
+All keys share one reading, refreshed every two seconds; pressing a key requests
+an immediate one. A failure keeps the last counts and marks them **stale** in
+gray. When no reading has arrived yet, `n/a` **NO CLI** means `agent-berth` was
+not found, `Err` **AGENT-BERTH** means it failed or returned an unusable
+payload, `TO` means it did not answer within five seconds, and `Err` **HELPER**
+means the plugin's shared service is unreachable — restart Ulanzi Studio.
+
 ## Configured AI Usage instances API
 
 `GET /usage/fetch` on the running plugin's bridge returns the AI Usage buttons
@@ -247,7 +294,8 @@ Widgets that need local filesystem or API access share **one** HTTP server in
 Handlers receive the request URL and return JSON data (or a promise for it).
 Each factory owns its widget type's cache; the server handles routing, CORS,
 request validation, and errors on the same port. Widget modules do not call
-`listen()` or create HTTP servers. AI Usage is registered at `/usage`.
+`listen()` or create HTTP servers. AI Usage is registered at `/usage` and Agent
+Status at `/agents`.
 
 Browser clients send `X-Ulanzi-Bridge: 1`. The old `X-Ulanzi-Usage: 1` header is
 accepted only for `/usage` for compatibility. `plugin/main.js` starts the shared server once per plugin process and closes it
@@ -266,3 +314,4 @@ widget modules, keeping the HTML preview usable as well.
 - Plugin UUID: `me.iany.ulanzistudio.js`
 - Clash Traffic action UUID: `me.iany.ulanzistudio.js.clashTraffic`
 - AI Usage action UUID: `me.iany.ulanzistudio.js.aiUsage`
+- Agent Status action UUID: `me.iany.ulanzistudio.js.agentStatus`

@@ -9,6 +9,10 @@
     {
       "Name": "AI 用量",
       "Tooltip": "显示 AI 剩余用量百分比和重置时间"
+    },
+    {
+      "Name": "智能体状态",
+      "Tooltip": "显示各状态的编码智能体会话数"
     }
   ],
   "Localization": {
@@ -39,6 +43,11 @@
     "Monthly": "每月",
     "Press URL": "按键打开的 URL",
     "Leave blank to open the provider's default usage page.": "留空打开提供商的默认用量页面。",
-    "Usage refreshes automatically. Press to open the page and refresh.": "用量会自动刷新。按键打开页面并刷新用量。"
+    "Usage refreshes automatically. Press to open the page and refresh.": "用量会自动刷新。按键打开页面并刷新用量。",
+    "Agent": "智能体",
+    "All agents": "全部智能体",
+    "All agents sums the sessions of every agent-berth provider.": "“全部智能体”汇总 agent-berth 中所有提供方的会话。",
+    "Leave blank to only refresh the counts on press.": "留空则按键时只刷新计数。",
+    "Sessions come from agent-berth and refresh every two seconds.": "会话数据来自 agent-berth，每两秒刷新一次。"
   }
 }

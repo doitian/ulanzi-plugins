@@ -18,7 +18,8 @@ test('Ulanzi launch starts the bridge, renders widgets, and exits with the host'
             ULANZI_CLAUDE_CREDENTIALS: path.join(__dirname, 'missing-auth.json'),
             ULANZI_OPENCODE_AUTH: path.join(__dirname, 'missing-auth.json'),
             ULANZI_GROK_CREDENTIALS: path.join(__dirname, 'missing-auth.json'),
-            MOONSHOT_API_KEY: '', MOONSHOT_CN_API_KEY: '', OPENCODE_GO_API_KEY: ''
+            MOONSHOT_API_KEY: '', MOONSHOT_CN_API_KEY: '', OPENCODE_GO_API_KEY: '',
+            ULANZI_AGENT_BERTH: path.join(__dirname, 'missing-agent-berth')
         }, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore']
     });
     t.after(() => { child.kill(); for (const client of host.clients) client.terminate(); host.close(); });
@@ -37,7 +38,7 @@ test('Ulanzi launch starts the bridge, renders widgets, and exits with the host'
     const icons = new Promise(resolve => host.on('connection', socket => socket.on('message', raw => {
         const message = JSON.parse(raw);
         if (message.cmd === 'connected') {
-            for (const action of ['aiUsage', 'clashTraffic']) socket.send(JSON.stringify({
+            for (const action of ['aiUsage', 'clashTraffic', 'agentStatus']) socket.send(JSON.stringify({
                 cmd: 'add', uuid: 'me.iany.ulanzistudio.js.' + action, key: action, actionid: 'test',
                 // Stale URL must be ignored; synthetic credential paths isolate the real accounts.
                 param: { helperUrl: 'http://127.0.0.1:1/usage', wsUrl: 'ws://127.0.0.1:1/traffic' }
@@ -46,7 +47,7 @@ test('Ulanzi launch starts the bridge, renders widgets, and exits with the host'
         for (const state of message.param?.statelist || []) {
             if (state.type === 1) assert.ok(state.data.startsWith('data:image/png;base64,'));
             rendered.add(state.key);
-            if (rendered.size === 2) resolve(socket);
+            if (rendered.size === 3) resolve(socket);
         }
     })));
     const socket = await Promise.race([icons, exited.then(code => { throw new Error('Plugin exited before rendering: ' + code); })]);

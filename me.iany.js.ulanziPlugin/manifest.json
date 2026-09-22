@@ -54,6 +54,26 @@
         "Keypad"
       ],
       "Devices": []
+    },
+    {
+      "Name": "Agent Status",
+      "Icon": "resources/agent-status/action-icon.svg",
+      "PropertyInspectorPath": "property-inspector/agent-status/inspector.html",
+      "state": 0,
+      "States": [
+        {
+          "Name": "Agents",
+          "Image": "resources/agent-status/action-icon.svg"
+        }
+      ],
+      "Tooltip": "Show coding agent session counts by status",
+      "UUID": "me.iany.ulanzistudio.js.agentStatus",
+      "SupportedInMultiActions": false,
+      "DisableAutomaticStates": true,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": []
     }
   ],
   "OS": [

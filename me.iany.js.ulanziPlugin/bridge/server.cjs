@@ -1,13 +1,15 @@
 // Shared local HTTP server for all widget types. Run: node bridge/server.cjs
 const http = require('node:http');
 const { createUsageRoute } = require('./ai-usage.cjs');
+const { createAgentsRoute } = require('./agent-status.cjs');
 
-function createRoutes({ getInstances = () => [], usageRoute = createUsageRoute() } = {}) {
+function createRoutes({ getInstances = () => [], usageRoute = createUsageRoute(), agentsRoute = createAgentsRoute() } = {}) {
     return new Map([
         ['/health', async () => ({ service: 'me.iany.ulanzistudio.js.bridge' })],
         ['/usage/fetch', () => ({ instances: getInstances() })],
         ['/usage', usageRoute],
-        ['/usage/refresh', url => usageRoute(url, true)]
+        ['/usage/refresh', url => usageRoute(url, true)],
+        ['/agents', agentsRoute]
         // Register other widget route factories here, on the same server.
     ]);
 }
