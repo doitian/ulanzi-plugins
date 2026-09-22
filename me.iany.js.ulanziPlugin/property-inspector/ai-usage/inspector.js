@@ -3,7 +3,7 @@ let settings = {};
 let form;
 function applySettings() {
     if (!form) return;
-    Utils.setFormValue(Object.assign({ provider: 'codex', limit: 'five_hour', account: '', label: '', url: '' }, settings), form);
+    Utils.setFormValue(Object.assign({ provider: 'codex', limit: 'five_hour', account: '', label: '', url: '', gauge: 'none' }, settings), form);
     updateWindows();
 }
 function updateWindows() {

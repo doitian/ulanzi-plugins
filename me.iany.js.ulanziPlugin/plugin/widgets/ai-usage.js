@@ -79,7 +79,7 @@ function selectUsage(data, settings) {
     return { remaining: Math.max(0, Math.min(100, remaining)), reset: Date.parse(limit.resets_at) };
 }
 
-const COLORS = { gray: '#a0a0a0', green: '#00c850', yellow: '#f0be00', red: '#e63c32' };
+const COLORS = { gray: '#a0a0a0', green: '#00c850', yellow: '#f0be00', red: '#e63c32', blue: '#5aa0dc' };
 function resetText(reset) {
     if (!Number.isFinite(reset)) return '';
     const seconds = Math.floor((reset - Date.now()) / 1000);
@@ -113,6 +113,37 @@ function presentation(usage, stale) {
     const thresholds = balance ? (usage.currency === 'CNY' ? [70, 36] : [12, 6]) : [60, 30];
     const value = balance ? usage.amount : usage.remaining;
     return { center: parts[0], footer: parts[1], color: stale ? COLORS.gray : value >= thresholds[0] ? COLORS.green : value >= thresholds[1] ? COLORS.yellow : COLORS.red };
+}
+// Windows measured in days; the reset gauge needs the full period to compare against.
+const LIMIT_DAYS = { seven_day: 7, seven_day_fable: 7, seven_day_sonnet: 7, weekly: 7, monthly: 30 };
+function gauges(usage, limit, now) {
+    const days = LIMIT_DAYS[limit];
+    if (!days || usage.error || typeof usage.remaining !== 'number') return null;
+    const left = Number.isFinite(usage.reset) ? (usage.reset - (now || Date.now())) / (days * 86400000) : null;
+    return { usage: usage.remaining / 100, time: left === null ? null : Math.max(0, Math.min(1, left)) };
+}
+function drawBar(ctx, x, y, width, height, fraction, color) {
+    ctx.fillStyle = '#323232';
+    ctx.fillRect(x, y, width, height);
+    const filled = Math.round(height * Math.max(0, Math.min(1, fraction)));
+    if (filled > 0) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y + height - filled, width, filled);
+    }
+}
+function drawPie(ctx, x, y, radius, fraction, color) {
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#323232';
+    ctx.fill();
+    if (fraction > 0) {
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.arc(x, y, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, fraction));
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+    }
 }
 function drawFit(ctx, text, x, y, size, width) {
     do { ctx.font = size + 'px "Segoe UI", sans-serif'; size--; }
@@ -183,7 +214,8 @@ AiUsageWidget.prototype.getSnapshot = function () {
             provider: this.settings.provider || 'codex',
             limit: this.settings.limit || 'five_hour',
             account: this.settings.account || '',
-            label: this.settings.label || ''
+            label: this.settings.label || '',
+            gauge: this.settings.gauge || 'none'
         },
         usage,
         fetchedAt: source?.data?.fetchedAt ?? null,
@@ -214,8 +246,21 @@ AiUsageWidget.prototype.render = function () {
     const display = presentation(usage, stale);
     ctx.textAlign = 'center'; ctx.fillStyle = display.color;
     drawFit(ctx, display.center, 72, 72, 41, 114);
+    const style = this.settings.gauge || 'none';
+    const dials = style === 'none' ? null : gauges(usage, this.settings.limit || 'five_hour');
     ctx.fillStyle = '#b4b4b4';
-    drawFit(ctx, display.footer, 72, 124, 20, 114);
+    drawFit(ctx, display.footer, 72, 124, 20, dials && style === 'pie' ? 68 : 114);
+    if (dials) {
+        const timeColor = stale ? COLORS.gray : COLORS.blue;
+        if (style === 'bars') {
+            // Start below the label/icon row so the bars never crowd it.
+            drawBar(ctx, 4, 52, 8, 84, dials.usage, display.color);
+            if (dials.time !== null) drawBar(ctx, 132, 52, 8, 84, dials.time, timeColor);
+        } else {
+            drawPie(ctx, 21, 123, 15, dials.usage, display.color);
+            if (dials.time !== null) drawPie(ctx, 123, 123, 15, dials.time, timeColor);
+        }
+    }
     // Keep a stale indication without replacing the reset/decimal footer.
     if (stale) { ctx.fillStyle = COLORS.gray; ctx.font = '9px "Segoe UI", sans-serif'; ctx.fillText('stale', 72, 103); }
     $UD.setBaseDataIcon(this.context, this.canvas.toDataURL('image/png'), '');
@@ -225,4 +270,5 @@ window.AiUsageWidget = AiUsageWidget;
 AiUsageWidget.selectUsage = selectUsage;
 AiUsageWidget.presentation = presentation;
 AiUsageWidget.balanceParts = balanceParts;
+AiUsageWidget.gauges = gauges;
 }());

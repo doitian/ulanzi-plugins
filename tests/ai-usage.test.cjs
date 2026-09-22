@@ -21,7 +21,10 @@ function runtime(fetch = async () => ({ ok: true, json: async () => ({ ...fixtur
     const texts = [];
     const icons = [];
     const opened = [];
-    const ctx = { drawImage() {}, measureText(text) { return { width: text.length * 10 }; }, fillRect() {}, fillText(text) { texts.push(text); } };
+    const shapes = [];
+    const ctx = { drawImage() {}, measureText(text) { return { width: text.length * 10 }; }, fillText(text) { texts.push(text); },
+        fillRect(...args) { shapes.push(['rect', ...args]); }, arc(...args) { shapes.push(['arc', ...args]); },
+        beginPath() {}, moveTo() {}, closePath() {}, fill() {} };
     const env = { Image: class { constructor() { this.complete = true; this.naturalWidth = 24; } }, window: { ULANZI_BRIDGE_URL: 'http://127.0.0.1:23456' }, URL, AbortController, fetch, console,
         setTimeout, clearTimeout,
         setInterval(fn) { timers.add(fn); return fn; }, clearInterval(fn) { timers.delete(fn); },
@@ -29,7 +32,7 @@ function runtime(fetch = async () => ({ ok: true, json: async () => ({ ...fixtur
         $UD: { setBaseDataIcon(context) { icons.push(context); }, openUrl(url) { opened.push(url); } }
     };
     vm.runInNewContext(fs.readFileSync(path.join(root, 'plugin/widgets/ai-usage.js'), 'utf8'), env);
-    return { Widget: env.window.AiUsageWidget, timers, texts, icons, opened };
+    return { Widget: env.window.AiUsageWidget, timers, texts, icons, opened, shapes };
 }
 test('selects active/exact account, remaining vs used, missing/error and model windows', () => {
     const select = runtime().Widget.selectUsage;
@@ -309,4 +312,32 @@ test('reference percentage thresholds, balance split and balance thresholds', ()
     }
     const data = sanitize({ providers: { moonshot: { accounts: [{ active: true, limits: { balance: { remaining_amount: 123.45, currency: 'CNY' } } }] } } });
     assert.equal(Widget.selectUsage(data, { provider: 'moonshot', limit: 'balance' }).amount, 123.45);
+});
+test('gauges cover day windows only and clamp the remaining share of the period', () => {
+    const { Widget } = runtime();
+    const now = Date.parse('2030-03-10T00:00:00Z');
+    const day = 86400000;
+    for (const limit of ['five_hour', 'rolling', 'balance', 'absent']) {
+        assert.equal(Widget.gauges({ remaining: 50, reset: now + day }, limit, now), null);
+    }
+    assert.equal(Widget.gauges({ error: 'No account' }, 'seven_day', now), null);
+    assert.equal(Widget.gauges({ amount: 12, currency: 'USD' }, 'seven_day', now), null);
+    assert.deepEqual({ ...Widget.gauges({ remaining: 40, reset: now + 3.5 * day }, 'seven_day', now) }, { usage: 0.4, time: 0.5 });
+    assert.deepEqual({ ...Widget.gauges({ remaining: 0, reset: now + 15 * day }, 'monthly', now) }, { usage: 0, time: 0.5 });
+    assert.equal(Widget.gauges({ remaining: 60, reset: now - day }, 'weekly', now).time, 0);
+    assert.equal(Widget.gauges({ remaining: 60, reset: now + 30 * day }, 'weekly', now).time, 1);
+    assert.equal(Widget.gauges({ remaining: 60 }, 'weekly', now).time, null);
+});
+test('gauge styles draw only when selected, and never for hour windows', async () => {
+    for (const [gauge, limit, arcs, rects] of [['none', 'seven_day', 0, 1], ['pie', 'seven_day', 4, 1], ['bars', 'seven_day', 0, 5], ['bars', 'five_hour', 0, 1]]) {
+        const limits = { five_hour: { remaining_percent: 73, resets_at: '2099-01-01T00:00:00Z' }, seven_day: { remaining_percent: 40, resets_at: '2099-01-01T00:00:00Z' } };
+        const { Widget, shapes } = runtime(async () => ({ ok: true, json: async () => ({ providers: { codex: { accounts: [{ active: true, limits }] } }, fetchedAt: Date.now() }) }));
+        const widget = new Widget('gauge');
+        widget.updateSettings({ gauge, limit });
+        await widget.source.pending;
+        shapes.length = 0;
+        widget.render();
+        assert.equal(shapes.filter(shape => shape[0] === 'arc').length, arcs, gauge + '/' + limit);
+        assert.equal(shapes.filter(shape => shape[0] === 'rect').length, rects, gauge + '/' + limit);
+    }
 });
