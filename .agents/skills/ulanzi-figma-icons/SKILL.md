@@ -8,13 +8,15 @@ description: Create or edit Ulanzi icons in Figma with consistent styling, 32x32
 ## Dedicated destination
 
 The user maintains this page specifically for creating Ulanzi icons:
-[Ulanzi icon page](https://www.figma.com/design/VhiAIsi0jhFMYS6zBe0w9o/Ulanzi?node-id=677-82).
+[Ulanzi icon page](https://www.figma.com/design/YbUNFaHctftbf0ji4w5b5I/Ulanzi?node-id=677-82).
 
-- File key: `VhiAIsi0jhFMYS6zBe0w9o`.
+- File key: `YbUNFaHctftbf0ji4w5b5I`.
 - Page ID: `677:82`.
 - Existing `Default` icon grid: `678:77`.
 
 Use this destination for Ulanzi icon requests unless the user specifies another destination. Inspect the current page and grid before editing; IDs and layout may change. Use the available `figma-use` skill for Figma API operations.
+
+If `use_figma` fails with `Can't call "<method>" in read-only mode`, the account lacks edit rights on the file rather than the file being in Dev Mode. Check seats with `whoami`: a View seat cannot be fixed by toggling Design mode, and it also covers that team's Drafts. There is no duplicate-file API — `create_new_file` only creates a blank file — so ask the user to duplicate the file in the Figma UI (right-click the file then **Duplicate**, or **File > Save to your drafts**) and hand back the new URL. A duplicate preserves node IDs, so the page and grid IDs above still resolve; update this section with the new file key when the destination moves.
 
 ## Style consistency is essential
 
@@ -24,7 +26,9 @@ Match silhouette, stroke weight, filled versus outlined treatment, corner shape,
 
 Observed palette: light gray `#CDCDCD`, purple accent `#9974F8`, dark detail `#333333`, and a black preview background. Verify the current neighboring artwork and any bound styles or variables before using these values. Prefer existing bindings when available. Use purple sparingly for the action or status accent; preserve established brand colors for branded icons.
 
-For folder icons, reuse the existing folder silhouette and place a compact semantic symbol on it. For related actions, reuse the same base geometry so they read as a family.
+For folder icons, reuse the existing folder silhouette and place a compact semantic symbol on it. For related actions, reuse the same base geometry so they read as a family. Rebuilding a silhouette from another icon's `vectorPaths` reproduces it exactly and, unlike cloning, works across files.
+
+Corner accents must be compact solid shapes, such as the sparkle on `ai-usage-stats-folder` or the triangle on `macro-play`. A stroked path with several direction changes packed into roughly 10 px collapses into a colored smudge at 32x32, however clean it looks zoomed in. Simple wide arcs, as on `voice-input`, are the exception that survives.
 
 ## Required dimensions and padding
 
@@ -46,4 +50,4 @@ Add a PNG export preset to every created or edited icon's **outer 32x32 slot**, 
 
 Append to the next available grid slot, preserving existing order and spacing. The observed grid has five columns and 12 px gaps, with wrapping enabled; inspect its live settings rather than rebuilding it. Allow the grid to grow for a new row.
 
-After editing, verify the 32x32 slot and the applicable structure: standalone artwork stays in its centered 24x24 frame; folders also have a centered 24x24 frame; addons may cross the main frame edge without clipping while staying within the outer slot. Render the affected grid and compare the result with neighboring icons for consistent size, visual weight, color, and spacing. Correct discrepancies before reporting completion. Keep artwork editable and return a direct Figma link to the result.
+After editing, verify the 32x32 slot and the applicable structure: standalone artwork stays in its centered 24x24 frame; folders also have a centered 24x24 frame; addons may cross the main frame edge without clipping while staying within the outer slot. Render the affected grid **at actual size** and compare the result with neighboring icons for consistent size, visual weight, color, and spacing. A zoomed render hides the legibility failures that matter, so judge every icon at 1x; upscale that 1x render with nearest-neighbour sampling to inspect it without inventing detail. When a symbol's readability is uncertain, build the candidates as a temporary off-grid strip, compare them at 1x, then apply the winner and delete the strip. Correct discrepancies before reporting completion. Keep artwork editable and return a direct Figma link to the result.
