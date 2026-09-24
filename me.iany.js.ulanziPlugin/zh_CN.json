@@ -13,6 +13,22 @@
     {
       "Name": "智能体状态",
       "Tooltip": "显示各状态的编码智能体会话数"
+    },
+    {
+      "Name": "切换播放设备",
+      "Tooltip": "通过 SoundSwitch 切换到下一个播放设备"
+    },
+    {
+      "Name": "切换录音设备",
+      "Tooltip": "通过 SoundSwitch 切换到下一个录音设备"
+    },
+    {
+      "Name": "麦克风静音",
+      "Tooltip": "通过 SoundSwitch 切换默认麦克风静音"
+    },
+    {
+      "Name": "声音配置",
+      "Tooltip": "激活 SoundSwitch 配置文件"
     }
   ],
   "Localization": {
@@ -47,6 +63,19 @@
     "All agents": "全部智能体",
     "All agents sums the sessions of every agent-berth provider.": "“全部智能体”汇总 agent-berth 中所有提供方的会话。",
     "Leave blank to only refresh the counts on press.": "留空则按键时只刷新计数。",
-    "Sessions come from agent-berth and refresh every two seconds.": "会话数据来自 agent-berth，每两秒刷新一次。"
+    "Sessions come from agent-berth and refresh every two seconds.": "会话数据来自 agent-berth，每两秒刷新一次。",
+    "SoundSwitch CLI": "SoundSwitch CLI",
+    "Browse...": "浏览...",
+    "Leave blank to auto-detect SoundSwitch.CLI.exe in PATH or the scoop apps directory.": "留空则自动在 PATH 或 scoop apps 目录中检测 SoundSwitch.CLI.exe。",
+    "Press to switch to the next playback device. The key shows the current default output.": "按键切换到下一个播放设备。按键上显示当前默认输出。",
+    "Press to switch to the next recording device. The key shows the current default input.": "按键切换到下一个录音设备。按键上显示当前默认输入。",
+    "Press to toggle the default microphone mute. The key shows LIVE or MUTED.": "按键切换默认麦克风静音。按键上显示 LIVE 或 MUTED。",
+    "Profile": "配置文件",
+    "Playback": "播放",
+    "Recording": "录音",
+    "Microphone": "麦克风",
+    "Icon": "图标",
+    "Reload profiles": "重新加载配置文件",
+    "Press to activate the profile. The key marks it ACTIVE while it is the active SoundSwitch profile.": "按键激活该配置文件。当它是 SoundSwitch 当前配置时，按键会标记 ACTIVE。"
   }
 }

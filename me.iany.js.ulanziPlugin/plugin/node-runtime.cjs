@@ -1,8 +1,11 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { createCanvas, Image } = require('@napi-rs/canvas');
+const { createCanvas, Image, GlobalFonts } = require('@napi-rs/canvas');
 const WebSocket = require('ws');
+
+// Segoe UI lacks CJK glyphs; make Microsoft YaHei explicit for the widget font stack.
+try { GlobalFonts.registerFromPath(path.join(process.env.SystemRoot || 'C:\\Windows', 'Fonts', 'msyh.ttc'), 'Microsoft YaHei'); } catch (_) {}
 
 // Keep the widget rendering modules usable in both Node and the HTML preview.
 function loadWidgets(api, bridgeUrl) {
@@ -23,7 +26,7 @@ function loadWidgets(api, bridgeUrl) {
     };
     environment.window = environment;
     const context = vm.createContext(environment);
-    for (const file of ['widgets/clash-traffic.js', 'widgets/ai-usage.js', 'widgets/agent-status.js', 'app.js']) {
+    for (const file of ['widgets/clash-traffic.js', 'widgets/ai-usage.js', 'widgets/agent-status.js', 'widgets/sound-switch.js', 'app.js']) {
         vm.runInContext(fs.readFileSync(path.join(__dirname, file), 'utf8'), context, { filename: file });
     }
     return {

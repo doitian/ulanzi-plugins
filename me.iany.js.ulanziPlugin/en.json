@@ -13,6 +13,22 @@
     {
       "Name": "Agent Status",
       "Tooltip": "Show coding agent session counts by status"
+    },
+    {
+      "Name": "Switch Playback",
+      "Tooltip": "Switch to the next playback device via SoundSwitch"
+    },
+    {
+      "Name": "Switch Recording",
+      "Tooltip": "Switch to the next recording device via SoundSwitch"
+    },
+    {
+      "Name": "Mic Mute",
+      "Tooltip": "Toggle the default microphone mute via SoundSwitch"
+    },
+    {
+      "Name": "Sound Profile",
+      "Tooltip": "Activate a SoundSwitch profile"
     }
   ],
   "Localization": {
@@ -47,6 +63,19 @@
     "All agents": "All agents",
     "All agents sums the sessions of every agent-berth provider.": "All agents sums the sessions of every agent-berth provider.",
     "Leave blank to only refresh the counts on press.": "Leave blank to only refresh the counts on press.",
-    "Sessions come from agent-berth and refresh every two seconds.": "Sessions come from agent-berth and refresh every two seconds."
+    "Sessions come from agent-berth and refresh every two seconds.": "Sessions come from agent-berth and refresh every two seconds.",
+    "SoundSwitch CLI": "SoundSwitch CLI",
+    "Browse...": "Browse...",
+    "Leave blank to auto-detect SoundSwitch.CLI.exe in PATH or the scoop apps directory.": "Leave blank to auto-detect SoundSwitch.CLI.exe in PATH or the scoop apps directory.",
+    "Press to switch to the next playback device. The key shows the current default output.": "Press to switch to the next playback device. The key shows the current default output.",
+    "Press to switch to the next recording device. The key shows the current default input.": "Press to switch to the next recording device. The key shows the current default input.",
+    "Press to toggle the default microphone mute. The key shows LIVE or MUTED.": "Press to toggle the default microphone mute. The key shows LIVE or MUTED.",
+    "Profile": "Profile",
+    "Playback": "Playback",
+    "Recording": "Recording",
+    "Microphone": "Microphone",
+    "Icon": "Icon",
+    "Reload profiles": "Reload profiles",
+    "Press to activate the profile. The key marks it ACTIVE while it is the active SoundSwitch profile.": "Press to activate the profile. The key marks it ACTIVE while it is the active SoundSwitch profile."
   }
 }

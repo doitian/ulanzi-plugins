@@ -1,7 +1,8 @@
 # iany's JS Widgets — Ulanzi Deck Plugin
 
 A collection of JavaScript widgets that share one Ulanzi Deck plugin service.
-Includes Clash Traffic, AI Usage, and Agent Status, with one shared service.
+Includes Clash Traffic, AI Usage, Agent Status, and SoundSwitch sound controls,
+with one shared service.
 
 ## Widgets
 
@@ -222,6 +223,48 @@ gray. When no reading has arrived yet, `n/a` **NO CLI** means `agent-berth` was
 not found, `Err` **AGENT-BERTH** means it failed or returned an unusable
 payload, `TO` means it did not answer within five seconds, and `Err` **HELPER**
 means the plugin's shared service is unreachable — restart Ulanzi Studio.
+
+### Sound Controls (SoundSwitch)
+
+Four Windows keys driven by [SoundSwitch](https://soundswitch.aaflalo.me/) and
+its `SoundSwitch.CLI.exe`, keeping the deck in sync with the real audio state.
+Each key shows its icon filling the key with the live state as a label along
+the bottom (rendered with a CJK-capable font stack, so Chinese device names
+display correctly):
+
+- **Switch Playback** — press to cycle to the next playback device; the label
+  shows the current default output.
+- **Switch Recording** — the same for recording/input devices.
+- **Mic Mute** — press to toggle the default microphone mute; the label shows
+  **LIVE** or **MUTED** with the microphone name, and a corner dot is green
+  while live and red while muted.
+- **Sound Profile** — press to activate the configured SoundSwitch profile; a
+  green check marks the key while it is the last triggered profile. The profile
+  field autocompletes from `SoundSwitch.CLI.exe profile --list --json`, and the
+  key's icon can be switched between the profile, playback, recording, and
+  microphone glyphs.
+
+The CLI is resolved per key: an explicit path configured in the property
+inspector wins (type it or use **Browse...**); otherwise the plugin auto-detects
+`SoundSwitch.CLI.exe` on the Ulanzi Studio process `PATH`, then in the scoop
+install at `%SCOOP%\apps\soundswitch\current` and `~\scoop\apps\soundswitch\current`. SoundSwitch must be running for
+switches, mutes, and profile activations to take effect.
+
+Open any sound key's property inspector to configure:
+
+| Field | Description | Default |
+| --- | --- | --- |
+| **Profile** (Sound Profile only) | Profile to activate; autocomplete from the CLI | _empty_ |
+| **Icon** (Sound Profile only) | Glyph drawn on the key | Profile |
+| **Label** | Prefixes the state text shown along the bottom | _empty_ |
+| **SoundSwitch CLI** | Explicit path to `SoundSwitch.CLI.exe`; blank auto-detects | _empty_ |
+
+All keys poll their state every five seconds and refresh right after a press.
+Until a reading arrives the label shows an error instead: **NO CLI** means the
+executable was not found, **BAD PATH** means the configured path does not
+exist, **TIMEOUT** means the CLI did not answer in time, and **CLI
+ERROR**/**HELPER ERROR** mean the CLI or the plugin's shared service failed —
+check that SoundSwitch is running and restart Ulanzi Studio.
 
 ## Configured AI Usage instances API
 

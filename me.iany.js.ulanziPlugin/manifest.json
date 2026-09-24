@@ -74,6 +74,82 @@
         "Keypad"
       ],
       "Devices": []
+    },
+    {
+      "Name": "Switch Playback",
+      "Icon": "resources/sound-switch/playback.png",
+      "PropertyInspectorPath": "property-inspector/sound-switch-playback/inspector.html",
+      "state": 0,
+      "States": [
+        {
+          "Name": "Playback",
+          "Image": "resources/sound-switch/playback.png"
+        }
+      ],
+      "Tooltip": "Switch to the next playback device via SoundSwitch",
+      "UUID": "me.iany.ulanzistudio.js.soundSwitchPlayback",
+      "DisableAutomaticStates": true,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": []
+    },
+    {
+      "Name": "Switch Recording",
+      "Icon": "resources/sound-switch/recording.png",
+      "PropertyInspectorPath": "property-inspector/sound-switch-recording/inspector.html",
+      "state": 0,
+      "States": [
+        {
+          "Name": "Recording",
+          "Image": "resources/sound-switch/recording.png"
+        }
+      ],
+      "Tooltip": "Switch to the next recording device via SoundSwitch",
+      "UUID": "me.iany.ulanzistudio.js.soundSwitchRecording",
+      "DisableAutomaticStates": true,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": []
+    },
+    {
+      "Name": "Mic Mute",
+      "Icon": "resources/sound-switch/mic.png",
+      "PropertyInspectorPath": "property-inspector/sound-switch-mute/inspector.html",
+      "state": 0,
+      "States": [
+        {
+          "Name": "Mic",
+          "Image": "resources/sound-switch/mic.png"
+        }
+      ],
+      "Tooltip": "Toggle the default microphone mute via SoundSwitch",
+      "UUID": "me.iany.ulanzistudio.js.soundSwitchMute",
+      "DisableAutomaticStates": true,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": []
+    },
+    {
+      "Name": "Sound Profile",
+      "Icon": "resources/sound-switch/profile.svg",
+      "PropertyInspectorPath": "property-inspector/sound-switch-profile/inspector.html",
+      "state": 0,
+      "States": [
+        {
+          "Name": "Profile",
+          "Image": "resources/sound-switch/profile.svg"
+        }
+      ],
+      "Tooltip": "Activate a SoundSwitch profile",
+      "UUID": "me.iany.ulanzistudio.js.soundSwitchProfile",
+      "DisableAutomaticStates": true,
+      "Controllers": [
+        "Keypad"
+      ],
+      "Devices": []
     }
   ],
   "OS": [

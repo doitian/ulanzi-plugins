@@ -1,0 +1,2 @@
+/* global SoundSwitchPI */
+SoundSwitchPI.init();

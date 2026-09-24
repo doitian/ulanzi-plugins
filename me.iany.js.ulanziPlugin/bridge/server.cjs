@@ -2,17 +2,24 @@
 const http = require('node:http');
 const { createUsageRoute } = require('./ai-usage.cjs');
 const { createAgentsRoute } = require('./agent-status.cjs');
+const { createSoundSwitchRoutes } = require('./sound-switch.cjs');
 
-function createRoutes({ getInstances = () => [], usageRoute = createUsageRoute(), agentsRoute = createAgentsRoute() } = {}) {
+function createRoutes({ getInstances = () => [], usageRoute = createUsageRoute(), agentsRoute = createAgentsRoute(), soundSwitch = createSoundSwitchRoutes() } = {}) {
     return new Map([
         ['/health', async () => ({ service: 'me.iany.ulanzistudio.js.bridge' })],
         ['/usage/fetch', () => ({ instances: getInstances() })],
         ['/usage', usageRoute],
         ['/usage/refresh', url => usageRoute(url, true)],
-        ['/agents', agentsRoute]
+        ['/agents', agentsRoute],
+        ['/sound-switch/status', soundSwitch.status],
+        ['/sound-switch/mute', soundSwitch.mute],
+        ['/sound-switch/profiles', soundSwitch.profiles],
+        ['/sound-switch/run', soundSwitch.run]
         // Register other widget route factories here, on the same server.
     ]);
 }
+
+const POST_PATHS = new Set(['/usage/refresh', '/sound-switch/run']);
 
 function createServer({ routes = createRoutes() } = {}) {
     return http.createServer(async (req, res) => {
@@ -32,7 +39,7 @@ function createServer({ routes = createRoutes() } = {}) {
         let url;
         try { url = new URL(req.url, 'http://127.0.0.1'); }
         catch (_) { res.writeHead(400).end(); return; }
-        const method = url.pathname === '/usage/refresh' ? 'POST' : 'GET';
+        const method = POST_PATHS.has(url.pathname) ? 'POST' : 'GET';
         if (req.method !== method) { res.setHeader('Allow', method + ', OPTIONS'); res.writeHead(405).end(); return; }
         const legacyUsage = url.pathname === '/usage' && req.headers['x-ulanzi-usage'] === '1';
         if (req.headers['x-ulanzi-bridge'] !== '1' && !legacyUsage) {

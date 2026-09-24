@@ -1,10 +1,14 @@
-/* global $UD, ClashTrafficWidget, AiUsageWidget, AgentStatusWidget */
+/* global $UD, ClashTrafficWidget, AiUsageWidget, AgentStatusWidget, SoundSwitchPlaybackWidget, SoundSwitchRecordingWidget, SoundSwitchMuteWidget, SoundSwitchProfileWidget */
 
 const PLUGIN_UUID = 'me.iany.ulanzistudio.js';
 const WIDGETS = {
     'me.iany.ulanzistudio.js.clashTraffic': ClashTrafficWidget,
     'me.iany.ulanzistudio.js.aiUsage': AiUsageWidget,
-    'me.iany.ulanzistudio.js.agentStatus': AgentStatusWidget
+    'me.iany.ulanzistudio.js.agentStatus': AgentStatusWidget,
+    'me.iany.ulanzistudio.js.soundSwitchPlayback': SoundSwitchPlaybackWidget,
+    'me.iany.ulanzistudio.js.soundSwitchRecording': SoundSwitchRecordingWidget,
+    'me.iany.ulanzistudio.js.soundSwitchMute': SoundSwitchMuteWidget,
+    'me.iany.ulanzistudio.js.soundSwitchProfile': SoundSwitchProfileWidget
 };
 const INSTANCES = {};
 
@@ -55,6 +59,18 @@ $UD.onClear((jsn) => {
 
 $UD.onParamFromApp(updateInstance);
 $UD.onParamFromPlugin(updateInstance);
+
+// Property inspectors cannot reach the bridge directly; relay profile lists through the main service.
+$UD.onSendToPlugin((jsn) => {
+    const request = jsn && (jsn.param || jsn.payload);
+    if (!request || request.command !== 'listProfiles' || !jsn.context) return;
+    const reply = (data) => $UD.sendToPropertyInspector(Object.assign({ command: 'listProfiles' }, data), jsn.context);
+    const bridge = (window.ULANZI_BRIDGE_URL || 'http://127.0.0.1:18765') + '/sound-switch/profiles?exe=' + encodeURIComponent(request.exe || '');
+    fetch(bridge, { headers: { 'X-Ulanzi-Bridge': '1' }, cache: 'no-store' })
+        .then((response) => response.ok ? response.json() : { error: 'offline' })
+        .then((data) => reply({ profiles: data.profiles || [], error: data.error || null }))
+        .catch(() => reply({ profiles: [], error: 'offline' }));
+});
 
 function updateInstance(jsn) {
     const instance = INSTANCES[jsn.context];
