@@ -8,15 +8,15 @@ description: Create or edit Ulanzi icons in Figma with consistent styling, 32x32
 ## Dedicated destination
 
 The user maintains this page specifically for creating Ulanzi icons:
-[Ulanzi icon page](https://www.figma.com/design/YbUNFaHctftbf0ji4w5b5I/Ulanzi?node-id=677-82).
+[Ulanzi icon page](https://www.figma.com/design/yFeTTdZzp7mTmMCcI26LQ5/Untitled?node-id=677-82).
 
-- File key: `YbUNFaHctftbf0ji4w5b5I`.
+- File key: `yFeTTdZzp7mTmMCcI26LQ5`.
 - Page ID: `677:82`, named `Ulanzi Studio`.
 
 The page holds **several grids**, not one. Pick the grid matching the icon's context and fall back to `Default` for general Ulanzi Studio actions:
 
 | Grid | ID | Holds |
-|---|---|---|
+| --- | --- | --- |
 | `Default` | `678:77` | general actions and folders; 5 columns |
 | `Wheels` | `683:30` | dial/encoder actions; 3 columns |
 | `Apps` | `685:25` | desktop app launchers |
