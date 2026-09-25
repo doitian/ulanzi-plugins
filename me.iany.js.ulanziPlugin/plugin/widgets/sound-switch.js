@@ -8,9 +8,12 @@ const POLL_INTERVAL = 5000;
 const FLASH_MS = 3000;
 const RED = '#e63c32';
 const GREEN = '#85c995';
-const LABEL_STRIP = 28; // Bottom band reserved for the drawn label.
+const LABEL_STRIP = 32; // Bottom band reserved for the drawn label.
 const ICON_SIZE = 144 - LABEL_STRIP;
 const ICON_X = (144 - ICON_SIZE) / 2;
+const FONT_MAX = 20;
+const LABEL_CENTER = 144 - 8 - FONT_MAX / 2; // Keeps 8px of breathing room under the text.
+const DOT_GRAY = '#65686d';
 // Segoe UI has no CJK glyphs; skia falls back through the rest of the stack per glyph.
 const FONT_STACK = '"Segoe UI", "Microsoft YaHei", sans-serif';
 
@@ -158,6 +161,13 @@ SoundSwitchWidget.prototype.destroy = function () {
     clearTimeout(this.flashTimer);
     this.detach();
 };
+SoundSwitchWidget.prototype.aliasFor = function (device) {
+    const aliases = this.source && this.source.data && this.source.data.aliases;
+    if (!device || !aliases || typeof aliases !== 'object') return device;
+    const has = Object.prototype.hasOwnProperty;
+    const alias = has.call(aliases, device) ? aliases[device] : aliases[device.trim()];
+    return typeof alias === 'string' && alias ? alias : device;
+};
 SoundSwitchWidget.prototype.state = function () {
     const data = this.source && this.source.data;
     if (!data) return { error: (this.source && this.source.error) || 'loading' };
@@ -178,11 +188,11 @@ SoundSwitchWidget.prototype.labelText = function (state) {
     }
     let base;
     if (this.kind === 'mute') {
-        base = (state.muted ? 'MUTED' : 'LIVE') + (state.device ? ' ' + state.device : '');
+        base = (state.muted ? 'MUTED' : 'LIVE') + (state.device ? ' ' + this.aliasFor(state.device) : '');
     } else if (this.kind === 'profile') {
         base = state.profile || '-';
     } else {
-        base = state.device || 'none';
+        base = this.aliasFor(state.device) || 'none';
     }
     const label = (this.settings.label || '').trim();
     return label ? label + ' ' + base : base;
@@ -209,25 +219,21 @@ SoundSwitchWidget.prototype.render = function () {
         ctx.arc(14, 14, 10, 0, Math.PI * 2);
         ctx.fill();
     }
-    if (this.kind === 'profile' && state.profile && state.activeProfile === state.profile) {
-        ctx.strokeStyle = GREEN;
-        ctx.lineWidth = 8;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+    if (this.kind === 'profile' && state.profile) {
+        // The corner dot mirrors the mute key: green marks the active profile, gray the rest.
+        ctx.fillStyle = state.activeProfile === state.profile ? GREEN : DOT_GRAY;
         ctx.beginPath();
-        ctx.moveTo(8, 20);
-        ctx.lineTo(18, 30);
-        ctx.lineTo(40, 4);
-        ctx.stroke();
+        ctx.arc(14, 14, 10, 0, Math.PI * 2);
+        ctx.fill();
     }
     drawLabel(ctx, this.labelText(state), failed ? RED : '#ffffff');
     $UD.setBaseDataIcon(this.context, this.canvas.toDataURL('image/png'), '');
 };
 
 function drawLabel(ctx, text, color) {
-    let size = 18;
+    let size = FONT_MAX;
     ctx.font = size + 'px ' + FONT_STACK;
-    while (size > 10 && ctx.measureText(text).width > 136) {
+    while (size > 11 && ctx.measureText(text).width > 136) {
         size--;
         ctx.font = size + 'px ' + FONT_STACK;
     }
@@ -239,7 +245,7 @@ function drawLabel(ctx, text, color) {
     ctx.fillStyle = color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(shown, 72, 144 - LABEL_STRIP / 2);
+    ctx.fillText(shown, 72, LABEL_CENTER);
 }
 
 function makeConstructor(kind) {

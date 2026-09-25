@@ -76,6 +76,11 @@
     "Microphone": "麦克风",
     "Icon": "图标",
     "Reload profiles": "重新加载配置文件",
-    "Press to activate the profile. The key marks it ACTIVE while it is the active SoundSwitch profile.": "按键激活该配置文件。当它是 SoundSwitch 当前配置时，按键会标记 ACTIVE。"
+    "Press to activate the profile. The key marks it ACTIVE while it is the active SoundSwitch profile.": "按键激活该配置文件。当它是 SoundSwitch 当前配置时，按键会标记 ACTIVE。",
+    "No profile": "无配置文件",
+    "Device aliases": "设备别名",
+    "Add alias": "添加别名",
+    "Pick a device...": "选择设备...",
+    "Shows a shorter name on every Sound key. The list is shared by all SoundSwitch actions, so devices are renamed once.": "在所有声音按键上显示更短的名称。该列表由所有 SoundSwitch 操作共享，只需重命名一次。"
   }
 }

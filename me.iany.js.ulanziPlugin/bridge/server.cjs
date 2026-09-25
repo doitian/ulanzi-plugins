@@ -14,12 +14,27 @@ function createRoutes({ getInstances = () => [], usageRoute = createUsageRoute()
         ['/sound-switch/status', soundSwitch.status],
         ['/sound-switch/mute', soundSwitch.mute],
         ['/sound-switch/profiles', soundSwitch.profiles],
+        ['/sound-switch/aliases', soundSwitch.aliases],
+        ['/sound-switch/aliases/save', soundSwitch.setAliases],
         ['/sound-switch/run', soundSwitch.run]
         // Register other widget route factories here, on the same server.
     ]);
 }
 
-const POST_PATHS = new Set(['/usage/refresh', '/sound-switch/run']);
+const POST_PATHS = new Set(['/usage/refresh', '/sound-switch/aliases/save', '/sound-switch/run']);
+
+function readBody(req, limit = 1 << 20) {
+    return new Promise((resolve, reject) => {
+        let data = '';
+        req.setEncoding('utf8');
+        req.on('data', chunk => {
+            data += chunk;
+            if (data.length > limit) { reject(new Error('too_large')); req.destroy(); }
+        });
+        req.on('end', () => resolve(data));
+        req.on('error', reject);
+    });
+}
 
 function createServer({ routes = createRoutes() } = {}) {
     return http.createServer(async (req, res) => {
@@ -47,8 +62,18 @@ function createServer({ routes = createRoutes() } = {}) {
         }
         const handler = routes.get(url.pathname);
         if (!handler) { res.writeHead(404).end(); return; }
+        let body = null;
+        if (req.method === 'POST') {
+            try {
+                const raw = await readBody(req);
+                body = raw ? JSON.parse(raw) : null;
+            } catch (_) {
+                res.writeHead(400).end(JSON.stringify({ error: 'invalid_request' }));
+                return;
+            }
+        }
         res.setHeader('Content-Type', 'application/json');
-        try { res.end(JSON.stringify(await handler(url))); }
+        try { res.end(JSON.stringify(await handler(url, body))); }
         catch (_) { res.writeHead(503).end(JSON.stringify({ error: 'Widget data unavailable. Check the local helper.' })); }
     });
 }

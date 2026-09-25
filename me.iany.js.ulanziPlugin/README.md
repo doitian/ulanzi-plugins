@@ -239,10 +239,17 @@ display correctly):
   **LIVE** or **MUTED** with the microphone name, and a corner dot is green
   while live and red while muted.
 - **Sound Profile** — press to activate the configured SoundSwitch profile; a
-  green check marks the key while it is the last triggered profile. The profile
-  field autocompletes from `SoundSwitch.CLI.exe profile --list --json`, and the
-  key's icon can be switched between the profile, playback, recording, and
-  microphone glyphs.
+  corner dot is green while it is the active profile and gray otherwise. The
+  profile is chosen from a dropdown built from `SoundSwitch.CLI.exe profile
+  --list --json`, and the key's icon can be switched between the profile,
+  playback, recording, and microphone glyphs.
+
+Device names can be long or noisy on a 144px key. **Device aliases** in the
+playback, recording, and mic-mute inspectors map a device name to a shorter
+alias once; every Sound key reads the same shared map and shows the alias
+instead of the raw name. Aliases are stored outside the plugin folder (under
+`%APPDATA%\Ulanzi\UlanziDeck\me.iany.js.ulanziPlugin\`) so reinstalling the
+plugin keeps them.
 
 The CLI is resolved per key: an explicit path configured in the property
 inspector wins (type it or use **Browse...**); otherwise the plugin auto-detects
@@ -254,9 +261,10 @@ Open any sound key's property inspector to configure:
 
 | Field | Description | Default |
 | --- | --- | --- |
-| **Profile** (Sound Profile only) | Profile to activate; autocomplete from the CLI | _empty_ |
+| **Profile** (Sound Profile only) | Profile to activate; dropdown from the CLI | _empty_ |
 | **Icon** (Sound Profile only) | Glyph drawn on the key | Profile |
 | **Label** | Prefixes the state text shown along the bottom | _empty_ |
+| **Device aliases** (playback, recording, mic mute) | Shared `device = alias` list applied to every Sound key | _empty_ |
 | **SoundSwitch CLI** | Explicit path to `SoundSwitch.CLI.exe`; blank auto-detects | _empty_ |
 
 All keys poll their state every five seconds and refresh right after a press.

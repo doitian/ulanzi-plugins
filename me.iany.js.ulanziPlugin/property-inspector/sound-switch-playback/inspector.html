@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><title>Switch Playback Settings</title>
 <link rel="stylesheet" href="../../libs/css/uspi.css">
+<link rel="stylesheet" href="../sound-switch/inspector.css">
 <style>.pi-hint { font-size: 11px; color: #aaa; margin: 6px; }</style></head><body>
 <div class="uspi-wrapper hidden"><form id="property-inspector">
 <div class="uspi-item"><div class="uspi-item-label" data-localize>Label</div><input class="uspi-item-value" type="text" name="label" maxlength="24" placeholder="PLAYBACK"></div>
@@ -8,7 +9,15 @@
 <div class="uspi-item"><div class="uspi-item-label empty"></div><button class="uspi-item-value" type="button" id="browse" data-localize>Browse...</button></div>
 <div class="pi-hint" data-localize>Leave blank to auto-detect SoundSwitch.CLI.exe in PATH or the scoop apps directory.</div>
 <div class="pi-hint" data-localize>Press to switch to the next playback device. The key shows the current default output.</div>
-</form></div>
+</form>
+<div class="uspi-heading" data-localize>Device aliases</div>
+<div class="alias-list" id="device-aliases"></div>
+<div class="alias-add">
+<button type="button" id="add-alias" data-localize>Add alias</button>
+<select id="alias-device-picker"><option value="" data-localize>Pick a device...</option></select>
+</div>
+<div class="pi-hint" data-localize>Shows a shorter name on every Sound key. The list is shared by all SoundSwitch actions, so devices are renamed once.</div>
+</div>
 <script src="../../libs/js/constants.js"></script>
 <script src="../../libs/js/eventEmitter.js"></script>
 <script src="../../libs/js/timers.js"></script>

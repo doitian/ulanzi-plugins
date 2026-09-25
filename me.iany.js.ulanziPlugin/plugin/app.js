@@ -60,16 +60,39 @@ $UD.onClear((jsn) => {
 $UD.onParamFromApp(updateInstance);
 $UD.onParamFromPlugin(updateInstance);
 
-// Property inspectors cannot reach the bridge directly; relay profile lists through the main service.
+const BRIDGE_BASE = window.ULANZI_BRIDGE_URL || 'http://127.0.0.1:18765';
+
+function bridgeFetch(url, options = {}) {
+    return fetch(url, Object.assign({ cache: 'no-store' }, options, {
+        headers: Object.assign({ 'X-Ulanzi-Bridge': '1' }, options.headers || {})
+    }));
+}
+
+// Property inspectors cannot reach the bridge directly; relay their requests through the main service.
 $UD.onSendToPlugin((jsn) => {
     const request = jsn && (jsn.param || jsn.payload);
-    if (!request || request.command !== 'listProfiles' || !jsn.context) return;
-    const reply = (data) => $UD.sendToPropertyInspector(Object.assign({ command: 'listProfiles' }, data), jsn.context);
-    const bridge = (window.ULANZI_BRIDGE_URL || 'http://127.0.0.1:18765') + '/sound-switch/profiles?exe=' + encodeURIComponent(request.exe || '');
-    fetch(bridge, { headers: { 'X-Ulanzi-Bridge': '1' }, cache: 'no-store' })
-        .then((response) => response.ok ? response.json() : { error: 'offline' })
-        .then((data) => reply({ profiles: data.profiles || [], error: data.error || null }))
-        .catch(() => reply({ profiles: [], error: 'offline' }));
+    if (!request || !request.command || !jsn.context) return;
+    const reply = (data) => $UD.sendToPropertyInspector(Object.assign({ command: request.command }, data), jsn.context);
+    if (request.command === 'listProfiles') {
+        bridgeFetch(BRIDGE_BASE + '/sound-switch/profiles?exe=' + encodeURIComponent(request.exe || ''))
+            .then((response) => response.ok ? response.json() : { error: 'offline' })
+            .then((data) => reply({ profiles: data.profiles || [], error: data.error || null }))
+            .catch(() => reply({ profiles: [], error: 'offline' }));
+    } else if (request.command === 'getAliases') {
+        bridgeFetch(BRIDGE_BASE + '/sound-switch/aliases')
+            .then((response) => response.ok ? response.json() : { error: 'offline' })
+            .then((data) => reply({ aliases: data.aliases || {} }))
+            .catch(() => reply({ aliases: {} }));
+    } else if (request.command === 'setAliases') {
+        bridgeFetch(BRIDGE_BASE + '/sound-switch/aliases/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aliases: request.aliases || {} })
+        })
+            .then((response) => response.ok ? response.json() : { error: 'offline' })
+            .then((data) => reply({ aliases: data.aliases || {} }))
+            .catch(() => reply({ aliases: {}, error: 'offline' }));
+    }
 });
 
 function updateInstance(jsn) {

@@ -4,7 +4,17 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const { createSoundSwitchRoutes, detectExecutable, parseProfiles, parseMute, parseStatus } = require('../me.iany.js.ulanziPlugin/bridge/sound-switch.cjs');
+const { sanitizeAliases } = require('../me.iany.js.ulanziPlugin/bridge/sound-switch-aliases.cjs');
 const root = path.join(__dirname, '../me.iany.js.ulanziPlugin');
+
+function memoryStore(initial = {}) {
+    let data = sanitizeAliases(initial);
+    return {
+        file: 'memory',
+        read: () => Object.assign({}, data),
+        write: (aliases) => { data = sanitizeAliases(aliases); return data; }
+    };
+}
 
 const STATUS = { activeProfile: 'Gaming', playbackDevice: 'Speakers (Realtek(R) Audio)', recordingDevice: 'Microphone (USB)', playbackCommunicationDevice: '', recordingCommunicationDevice: '' };
 const PROFILES = [{ name: 'Gaming', playbackDevice: 'Speakers', playbackCommunicationDevice: '', recordingDevice: 'Mic', recordingCommunicationDevice: '' }];
@@ -18,14 +28,14 @@ function execStub(log, result) {
     };
 }
 
-function makeRoutes({ log = [], result = STATUS, exists = () => true, which = () => null, home = 'C:\\home' } = {}) {
+function makeRoutes({ log = [], result = STATUS, exists = () => true, which = () => null, home = 'C:\\home', aliasStore = memoryStore() } = {}) {
     let clock = 10_000;
     const tick = ms => { clock += ms; };
     const created = createSoundSwitchRoutes({
         exec: execStub(log, result), env: {}, exists, which, home,
-        now: () => clock, interval: 3000
+        now: () => clock, interval: 3000, aliasStore
     });
-    return { routes: created, tick };
+    return { routes: created, tick, aliasStore };
 }
 
 test('detectExecutable prefers PATH, then $env:SCOOP, then ~/scoop', () => {
@@ -71,7 +81,7 @@ test('queries resolve the executable, cache within the interval and keep the las
     assert.equal(failed.error, 'command_failed');
     assert.equal(failed.playbackDevice, STATUS.playbackDevice); // Last reading survives.
     assert.ok(!JSON.stringify(failed).includes('boom'));
-    const missing = createSoundSwitchRoutes({ exec: execStub([], {}), env: {}, exists: () => false, which: () => null, home: 'none' });
+    const missing = createSoundSwitchRoutes({ exec: execStub([], {}), env: {}, exists: () => false, which: () => null, home: 'none', aliasStore: memoryStore() });
     assert.equal((await missing.status(url)).error, 'cli_missing');
     assert.equal((await routes.status(new URL('http://127.0.0.1/sound-switch/status?exe=' + encodeURIComponent('C:\\nope.exe')))).error, 'invalid_path');
     const profiles = await routes.profiles(new URL('http://127.0.0.1/sound-switch/profiles'));
@@ -97,6 +107,20 @@ test('run maps commands to CLI arguments, validates input and invalidates caches
     assert.equal((await routes.run(new URL(base + '?command=settings'))).error, 'invalid_request');
     assert.equal((await routes.run(new URL(base + '?command=mute&exe=' + encodeURIComponent('C:\\nope.exe')))).error, 'invalid_path');
     assert.equal(log.length, 5); // Rejected runs never spawn the CLI.
+});
+
+test('alias store sanitizes input and readings carry the global map', async () => {
+    assert.deepEqual(sanitizeAliases({ '  Speaker  ': '  Speakers  ', '': 'x', 'C': 3 }), { Speaker: 'Speakers' });
+    assert.deepEqual(sanitizeAliases(null), {});
+    assert.deepEqual(sanitizeAliases(['nope']), {});
+    const store = memoryStore();
+    const { routes } = makeRoutes({ aliasStore: store });
+    const saved = await routes.setAliases(new URL('http://127.0.0.1/sound-switch/aliases/save'), { aliases: { 'Speakers (Realtek(R) Audio)': 'Speakers' } });
+    assert.deepEqual(saved, { ok: true, aliases: { 'Speakers (Realtek(R) Audio)': 'Speakers' } });
+    assert.deepEqual(await routes.aliases(), { aliases: { 'Speakers (Realtek(R) Audio)': 'Speakers' } });
+    const status = await routes.status(new URL('http://127.0.0.1/sound-switch/status'));
+    assert.deepEqual(status.aliases, { 'Speakers (Realtek(R) Audio)': 'Speakers' });
+    assert.equal(status.playbackDevice, STATUS.playbackDevice);
 });
 
 function runtime(fetch) {
@@ -128,8 +152,8 @@ function fetchStub(requests, bodies = {}) {
     return async (url, options = {}) => {
         requests.push({ url, method: options.method || 'GET' });
         let body = { error: 'cli_missing' };
-        if (url.includes('/sound-switch/status')) body = Object.assign({ error: null }, STATUS, bodies.status);
-        if (url.includes('/sound-switch/mute')) body = Object.assign({ isMuted: false, deviceName: 'Mic', error: null }, bodies.mute);
+        if (url.includes('/sound-switch/status')) body = Object.assign({ error: null, aliases: bodies.aliases || {} }, STATUS, bodies.status);
+        if (url.includes('/sound-switch/mute')) body = Object.assign({ isMuted: false, deviceName: 'Mic', error: null, aliases: bodies.aliases || {} }, bodies.mute);
         if (url.includes('/sound-switch/run')) body = bodies.run || { ok: true };
         return { ok: true, json: async () => body };
     };
@@ -174,14 +198,25 @@ test('mute key shows LIVE or MUTED with the device name and a red state dot when
     widget.destroy();
 });
 
-test('profile key shows the profile, an active check mark and the chosen icon', async () => {
+test('global aliases rename the device shown on a key', async () => {
     const requests = [];
-    const { env, texts, images, strokes } = runtime(fetchStub(requests));
+    const { env, texts } = runtime(fetchStub(requests, { aliases: { 'Speakers (Realtek(R) Audio)': 'Speakers' } }));
+    const widget = new env.window.SoundSwitchPlaybackWidget('pb');
+    widget.updateSettings({});
+    await widget.source.pending;
+    assert.ok(texts.includes('Speakers'));
+    assert.ok(!texts.includes('Speakers (Realtek(R) Audio)'));
+    widget.destroy();
+});
+
+test('profile key shows the profile, an active dot and the chosen icon', async () => {
+    const requests = [];
+    const { env, texts, images, fills } = runtime(fetchStub(requests));
     const widget = new env.window.SoundSwitchProfileWidget('prof');
     widget.updateSettings({ profile: 'Gaming' });
     await widget.source.pending;
     assert.ok(texts.includes('Gaming'));
-    assert.ok(strokes.includes('#85c995')); // Active profile gets a green check.
+    assert.ok(fills.includes('#85c995')); // Active profile gets a green dot.
     assert.deepEqual(images, ['../resources/sound-switch/profile.svg']);
     await widget.handlePress();
     assert.ok(requests.find(r => r.method === 'POST').url.includes('command=profile&name=Gaming'));

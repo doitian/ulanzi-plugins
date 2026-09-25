@@ -3,6 +3,7 @@ const { execFile, execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { createAliasStore } = require('./sound-switch-aliases.cjs');
 
 const COMMAND_TIMEOUT = 8000;
 const EXECUTABLE_NAME = 'SoundSwitch.CLI.exe';
@@ -82,9 +83,12 @@ function parseJson(stdout) {
     catch (_) { throw new Error('invalid_response'); }
 }
 
-function createSoundSwitchRoutes({ exec = execFile, env = process.env, exists = fs.existsSync, which = whichSync, home = os.homedir(), now = Date.now, interval = 3000 } = {}) {
+function createSoundSwitchRoutes({ exec = execFile, env = process.env, exists = fs.existsSync, which = whichSync, home = os.homedir(), now = Date.now, interval = 3000, aliasStore = createAliasStore() } = {}) {
     const caches = new Map(); // kind + resolved exe -> { body, readAt }
     let resolvedAuto;
+
+    // Aliases are global and cheap to read, so every reading carries the current map.
+    function withAliases(body) { return Object.assign({}, body, { aliases: aliasStore.read() }); }
 
     function resolve(explicit) {
         const target = typeof explicit === 'string' ? explicit.trim().slice(0, MAX_PATH) : '';
@@ -100,10 +104,10 @@ function createSoundSwitchRoutes({ exec = execFile, env = process.env, exists = 
     async function query(kind, exe, args, parse) {
         let resolved;
         try { resolved = resolve(exe); }
-        catch (error) { return { error: safeError(error) }; }
+        catch (error) { return withAliases({ error: safeError(error) }); }
         const key = kind + '|' + resolved;
         const cache = caches.get(key);
-        if (cache && now() - cache.readAt < interval) return cache.body;
+        if (cache && now() - cache.readAt < interval) return withAliases(cache.body);
         let body;
         try {
             body = Object.assign(parse(parseJson(await runCli(exec, resolved, args))), { error: null });
@@ -111,12 +115,15 @@ function createSoundSwitchRoutes({ exec = execFile, env = process.env, exists = 
             body = cache ? Object.assign({}, cache.body, { error: safeError(error) }) : { error: safeError(error) };
         }
         caches.set(key, { body, readAt: now() });
-        return body;
+        return withAliases(body);
     }
 
     const status = url => query('status', url.searchParams.get('exe'), ['status', '--json'], parseStatus);
     const mute = url => query('mute', url.searchParams.get('exe'), ['mute', '--json'], parseMute);
     const profiles = url => query('profiles', url.searchParams.get('exe'), ['profile', '--list', '--json'], payload => ({ profiles: parseProfiles(payload) }));
+
+    const aliases = () => ({ aliases: aliasStore.read() });
+    const setAliases = (url, body) => ({ ok: true, aliases: aliasStore.write(body && body.aliases) });
 
     async function run(url) {
         const params = url.searchParams;
@@ -149,7 +156,7 @@ function createSoundSwitchRoutes({ exec = execFile, env = process.env, exists = 
         return { ok: true };
     }
 
-    return { status, mute, profiles, run };
+    return { status, mute, profiles, aliases, setAliases, run };
 }
 
 module.exports = { createSoundSwitchRoutes, detectExecutable, parseProfiles, parseMute, parseStatus, whichSync };

@@ -1,0 +1,62 @@
+.alias-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px;
+}
+
+.alias-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.alias-row input {
+  flex: 1 1 50%;
+  min-width: 0;
+  height: var(--uspi-height);
+  padding: 0 10px;
+  color: var(--uspi-textcolor);
+  background-color: var(--uspi-inputbg);
+  border: 1px solid var(--uspi-inputbg);
+  border-radius: var(--uspi-borderradius);
+}
+
+.alias-remove {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
+  font-size: 16px;
+  border: none;
+  background: none;
+  color: var(--uspi-unitcolor);
+}
+
+.alias-remove:hover {
+  color: var(--uspi-textcolor);
+}
+
+.alias-add {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px;
+}
+
+.alias-add button {
+  width: auto;
+}
+
+.alias-add select {
+  flex: 1;
+  min-width: 0;
+  padding: 0 6px;
+  color: var(--uspi-textcolor);
+  height: var(--uspi-height);
+  background-color: var(--uspi-inputbg);
+  border: 1px solid var(--uspi-inputbg);
+  border-radius: var(--uspi-borderradius);
+}

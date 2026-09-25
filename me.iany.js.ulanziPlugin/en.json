@@ -76,6 +76,11 @@
     "Microphone": "Microphone",
     "Icon": "Icon",
     "Reload profiles": "Reload profiles",
-    "Press to activate the profile. The key marks it ACTIVE while it is the active SoundSwitch profile.": "Press to activate the profile. The key marks it ACTIVE while it is the active SoundSwitch profile."
+    "Press to activate the profile. The key marks it ACTIVE while it is the active SoundSwitch profile.": "Press to activate the profile. The key marks it ACTIVE while it is the active SoundSwitch profile.",
+    "No profile": "No profile",
+    "Device aliases": "Device aliases",
+    "Add alias": "Add alias",
+    "Pick a device...": "Pick a device...",
+    "Shows a shorter name on every Sound key. The list is shared by all SoundSwitch actions, so devices are renamed once.": "Shows a shorter name on every Sound key. The list is shared by all SoundSwitch actions, so devices are renamed once."
   }
 }
