@@ -106,7 +106,8 @@ any windowed limits returned for it. Credentials are resolved in order:
 2. pi's `kimi-coding` OAuth entry in `~/.pi/agent/auth.json` (`PI_CODING_AGENT_DIR`
    is respected; set `ULANZI_PI_AUTH` to override the exact file path).
 3. A `kimi-code-plan-cn` or `kimi-code-plan-global` API key saved by OpenCode
-   `/connect`. The global entry calls `https://api.kimi.ai/coding/v1` instead.
+   `/connect`, resolved like the other OpenCode credentials below. The global
+   entry calls `https://api.kimi.ai/coding/v1` instead.
 
 Near-expiry OAuth tokens are refreshed against `https://auth.kimi.com/api/oauth/token`
 (sending the `~/.kimi/device_id` header when present for Kimi CLI credentials) and
@@ -114,7 +115,7 @@ written back atomically, preserving unrelated entries in the same file. API-key
 credentials cannot be refreshed; rotate them in OpenCode when they expire.
 
 For **OpenCode Go**, select **Rolling (5 hours)**, **Weekly**, or **Monthly**.
-Credentials come from the `opencode-go` API entry created by OpenCode `/connect`,
+Credentials come from the `opencode-go` account created by OpenCode `/connect`,
 or from the `OPENCODE_GO_API_KEY` user environment variable. The helper calls
 `https://opencode.ai/zen/go/v1/usage` and shows the remaining percentage and reset
 duration using the same colors as Claude/Codex.
@@ -126,17 +127,22 @@ API entry from OpenCode, or `MOONSHOT_CN_API_KEY`. It also accepts the existing
 shows CNY. It never uses the international OpenCode credential. You can display
 China and international balances on separate keys.
 
-OpenCode credentials default to `~/.local/share/opencode/auth.json`, respecting
-`XDG_DATA_HOME`. Set `ULANZI_OPENCODE_AUTH` to override the exact file location.
-After setting persistent user environment variables, restart the shared bridge
-(or sign out and back in) for it to inherit them. After OpenCode `/connect`, a
-the next automatic refresh reads the updated file without restarting the server.
+OpenCode credentials for Go, Moonshot, and Kimi Code resolve in this order: the
+v2 SQLite store (`opencode.db`, `credential` table; `OPENCODE_DB` is respected),
+the early-v2 `account.json`, then the legacy v1 `auth.json` — v2 imports
+`auth.json` once and never writes it back. All three default to
+`$XDG_DATA_HOME/opencode` (`~/.local/share/opencode`). Set `ULANZI_OPENCODE_DB`,
+`ULANZI_OPENCODE_ACCOUNT`, or `ULANZI_OPENCODE_AUTH` to override the exact
+location. After setting persistent user environment variables, restart the
+shared bridge (or sign out and back in) for it to inherit them. After OpenCode
+`/connect`, the next automatic refresh reads the updated store without
+restarting the server.
 
 For **Moonshot (Kimi API)**, select the **Balance** window. Set `MOONSHOT_API_KEY`
 in the helper's user environment; it uses USD at `https://api.moonshot.ai/v1`.
 Set `MOONSHOT_BASE_URL=https://api.moonshot.cn/v1` for CNY. Alternatively, the
-helper reads `moonshotai` / `moonshotai-cn` API credentials from OpenCode's
-`$XDG_DATA_HOME/opencode/auth.json` (default `~/.local/share/opencode/auth.json`).
+helper reads `moonshotai` / `moonshotai-cn` API credentials from OpenCode, in
+the order described above.
 Balances show `¥123` at the center and `.45` below; large values use `¥12K`
 and `.345`. CNY is green from ¥70, yellow from ¥36, otherwise red; USD is green
 from $12, yellow from $6, otherwise red. Negative balances display as zero.

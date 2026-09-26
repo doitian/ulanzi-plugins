@@ -257,17 +257,84 @@ function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl =
             return { error: error instanceof UsageError ? error.code : 'request_failed' };
         }
     }
-    async function openCodeAuth() {
-        const file = env.ULANZI_OPENCODE_AUTH || path.join(env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'opencode', 'auth.json');
-        return (await readCredential(file)).data;
-    }
+    const openCodeDir = () => path.join(env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'opencode');
     function apiKey(auth, name) {
         const entry = auth[name];
         return entry?.type === 'api' && typeof entry.key === 'string' ? entry.key.trim() : '';
     }
+    // OpenCode v2 keeps credentials in the SQLite credential table (opencode.db);
+    // early v2 builds used account.json. auth.json is imported once and never
+    // written back, so read the newer stores first for every integration.
+    async function openCodeDbApiKeys(names) {
+        const file = env.ULANZI_OPENCODE_DB || env.OPENCODE_DB || path.join(openCodeDir(), 'opencode.db');
+        // Opening a missing database would create an empty file, so probe first.
+        try { await fs.stat(file); } catch (_) { return {}; }
+        let DatabaseSync;
+        try { ({ DatabaseSync } = require('node:sqlite')); } catch (_) { return {}; }
+        let db;
+        try {
+            db = new DatabaseSync(file, { readonly: true });
+            const rows = db.prepare(`SELECT integration_id, value, active, time_updated FROM credential WHERE integration_id IN (${names.map(() => '?').join(', ')})`).all(...names);
+            const groups = {};
+            for (const row of rows) {
+                try {
+                    const value = JSON.parse(row.value);
+                    if (!object(value) || value.type !== 'key' || typeof value.key !== 'string' || !value.key.trim()) continue;
+                    (groups[row.integration_id] ||= []).push({
+                        key: value.key.trim(),
+                        active: row.active === 1,
+                        updated: typeof row.time_updated === 'number' ? row.time_updated : 0
+                    });
+                } catch (_) {}
+            }
+            const keys = {};
+            for (const [name, entries] of Object.entries(groups)) {
+                entries.sort((a, b) => b.active - a.active || b.updated - a.updated);
+                keys[name] = entries[0].key;
+            }
+            return keys;
+        } catch (_) { return {}; }
+        finally { try { db?.close(); } catch (_) {} }
+    }
+    async function openCodeAccountApiKeys(names) {
+        const file = env.ULANZI_OPENCODE_ACCOUNT || path.join(openCodeDir(), 'account.json');
+        let data;
+        try { data = (await readCredential(file)).data; } catch (_) { return {}; }
+        if (!object(data.accounts)) return {};
+        const entries = {};
+        for (const account of Object.values(data.accounts)) {
+            if (!object(account) || !names.includes(account.serviceID)) continue;
+            const credential = account.credential;
+            if (!object(credential) || credential.type !== 'api' || typeof credential.key !== 'string' || !credential.key.trim()) continue;
+            const active = object(data.active) && data.active[account.serviceID] === account.id;
+            if (!entries[account.serviceID] || (active && !entries[account.serviceID].active)) {
+                entries[account.serviceID] = { key: credential.key.trim(), active };
+            }
+        }
+        return Object.fromEntries(Object.entries(entries).map(([name, entry]) => [name, entry.key]));
+    }
+    async function openCodeAuthApiKeys(names) {
+        const file = env.ULANZI_OPENCODE_AUTH || path.join(openCodeDir(), 'auth.json');
+        let data;
+        try { data = (await readCredential(file)).data; } catch (_) { return {}; }
+        const keys = {};
+        for (const name of names) {
+            const key = apiKey(data, name);
+            if (key) keys[name] = key;
+        }
+        return keys;
+    }
+    // Preferred integration first; returns { name, key } of the first match.
+    async function openCodeApiKey(names) {
+        const stores = await Promise.all([openCodeDbApiKeys(names), openCodeAccountApiKeys(names), openCodeAuthApiKeys(names)]);
+        for (const name of names) {
+            for (const store of stores) if (store[name]) return { name, key: store[name] };
+        }
+        return null;
+    }
     async function openCodeGo() {
         try {
-            const key = (env.OPENCODE_GO_API_KEY || '').trim() || apiKey(await openCodeAuth(), 'opencode-go');
+            const key = (env.OPENCODE_GO_API_KEY || '').trim() || (await openCodeApiKey(['opencode-go']) || {}).key || '';
             if (!key) throw new UsageError('auth_missing');
             const data = await request('https://opencode.ai/zen/go/v1/usage', { headers: { Accept: 'application/json', Authorization: 'Bearer ' + key } });
             if (!object(data.usage)) throw new UsageError('invalid_response');
@@ -287,11 +354,10 @@ function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl =
             let key = china ? (env.MOONSHOT_CN_API_KEY || (configuredBase === 'https://api.moonshot.cn/v1' ? env.MOONSHOT_API_KEY : '') || '').trim() : (env.MOONSHOT_API_KEY || '').trim();
             let base = china ? 'https://api.moonshot.cn/v1' : configuredBase;
             if (!key) {
-                const auth = await openCodeAuth();
-                const name = (china ? ['moonshotai-cn'] : ['moonshotai', 'moonshotai-cn']).find(name => apiKey(auth, name));
-                if (!name) throw new UsageError('auth_missing');
-                key = apiKey(auth, name);
-                base = name === 'moonshotai-cn' ? 'https://api.moonshot.cn/v1' : 'https://api.moonshot.ai/v1';
+                const found = await openCodeApiKey(china ? ['moonshotai-cn'] : ['moonshotai', 'moonshotai-cn']);
+                if (!found) throw new UsageError('auth_missing');
+                key = found.key;
+                base = found.name === 'moonshotai-cn' ? 'https://api.moonshot.cn/v1' : 'https://api.moonshot.ai/v1';
             }
             if (!['https://api.moonshot.ai/v1', 'https://api.moonshot.cn/v1'].includes(base)) throw new UsageError('request_failed');
             const data = await request(base + '/users/me/balance', { headers: { Accept: 'application/json', Authorization: 'Bearer ' + key } });
@@ -425,12 +491,10 @@ function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl =
                 }
             };
             async function apiKeyUsage() {
-                const auth = await openCodeAuth();
-                const entry = [['kimi-code-plan-cn', 'https://api.kimi.com/coding/v1'], ['kimi-code-plan-global', 'https://api.kimi.ai/coding/v1']]
-                    .map(([name, base]) => ({ key: apiKey(auth, name), base }))
-                    .find(candidate => candidate.key);
-                if (!entry) throw new UsageError('auth_missing');
-                return request(entry.base + '/usages', { headers: { Accept: 'application/json', Authorization: 'Bearer ' + entry.key, 'User-Agent': 'ulanzi-js-widgets/1.0' } });
+                const found = await openCodeApiKey(['kimi-code-plan-cn', 'kimi-code-plan-global']);
+                if (!found) throw new UsageError('auth_missing');
+                const base = found.name === 'kimi-code-plan-cn' ? 'https://api.kimi.com/coding/v1' : 'https://api.kimi.ai/coding/v1';
+                return request(base + '/usages', { headers: { Accept: 'application/json', Authorization: 'Bearer ' + found.key, 'User-Agent': 'ulanzi-js-widgets/1.0' } });
             }
             let data;
             try { data = await oauthUsage(cliFile, cliLayout); }

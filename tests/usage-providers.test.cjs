@@ -63,6 +63,78 @@ test('OpenCode credentials provide Go windows and independent Moonshot China bal
     assert.equal(result.providers.moonshot.accounts[0].limits.balance.currency, 'USD');
     assert.ok(!JSON.stringify(result).includes('-key'));
 });
+test('OpenCode v2 provides the Go key from account.json or the SQLite credential store', async t => {
+    const data = await setup(t);
+    const dir = path.dirname(data.codexFile);
+    data.options.env.ULANZI_OPENCODE_ACCOUNT = path.join(dir, 'account.json');
+    data.options.env.ULANZI_OPENCODE_DB = path.join(dir, 'missing.db');
+    await fs.writeFile(data.options.env.ULANZI_OPENCODE_ACCOUNT, JSON.stringify({
+        version: 2,
+        accounts: {
+            'acc-1': { id: 'acc-1', serviceID: 'opencode-go', description: 'default', credential: { type: 'api', key: 'account-go-key' } },
+            'acc-2': { id: 'acc-2', serviceID: 'other', credential: { type: 'api', key: 'unrelated' } }
+        },
+        active: { 'opencode-go': 'acc-1' }
+    }));
+    const usage = { usage: { weekly: { percent: 40, resetsAt: '2030-03-20T12:00:00Z' } } };
+    const fetchImpl = expected => async (url, options) => {
+        if (url === 'https://opencode.ai/zen/go/v1/usage') {
+            assert.equal(options.headers.Authorization, 'Bearer ' + expected);
+            return json(usage);
+        }
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    };
+    const fromAccount = await createUsageClient({ ...data.options, fetchImpl: fetchImpl('account-go-key') })();
+    assert.equal(fromAccount.providers['opencode-go'].accounts[0].limits.weekly.remaining_percent, 60);
+    assert.ok(!JSON.stringify(fromAccount).includes('account-go-key'));
+    let DatabaseSync;
+    try { ({ DatabaseSync } = require('node:sqlite')); } catch (_) { t.skip('node:sqlite unavailable'); return; }
+    const dbFile = path.join(dir, 'opencode.db');
+    data.options.env.ULANZI_OPENCODE_DB = dbFile;
+    const db = new DatabaseSync(dbFile);
+    db.exec('CREATE TABLE credential (id TEXT PRIMARY KEY, integration_id TEXT, label TEXT, value TEXT, connector_id TEXT, method_id TEXT, active INTEGER, time_created INTEGER, time_updated INTEGER)');
+    const insert = db.prepare('INSERT INTO credential (id, integration_id, value, active, time_updated) VALUES (?, ?, ?, ?, ?)');
+    insert.run('cred-old', 'opencode-go', JSON.stringify({ type: 'key', key: 'db-old-key' }), 0, 100);
+    insert.run('cred-active', 'opencode-go', JSON.stringify({ type: 'key', key: 'db-go-key' }), 1, 50);
+    insert.run('cred-other', 'moonshotai-cn', JSON.stringify({ type: 'key', key: 'unrelated' }), 1, 200);
+    db.close();
+    const fromDb = await createUsageClient({ ...data.options, fetchImpl: fetchImpl('db-go-key') })();
+    assert.equal(fromDb.providers['opencode-go'].accounts[0].limits.weekly.remaining_percent, 60);
+    assert.ok(!JSON.stringify(fromDb).includes('db-go-key'));
+});
+test('OpenCode v2 stores also serve Moonshot and Kimi Code API keys', async t => {
+    const data = await setup(t);
+    const dir = path.dirname(data.codexFile);
+    data.options.env.ULANZI_OPENCODE_ACCOUNT = path.join(dir, 'account.json');
+    data.options.env.ULANZI_OPENCODE_DB = path.join(dir, 'opencode.db');
+    let DatabaseSync;
+    try { ({ DatabaseSync } = require('node:sqlite')); } catch (_) { t.skip('node:sqlite unavailable'); return; }
+    await fs.writeFile(data.options.env.ULANZI_OPENCODE_ACCOUNT, JSON.stringify({
+        version: 2,
+        accounts: { 'acc-moonshot': { id: 'acc-moonshot', serviceID: 'moonshotai-cn', credential: { type: 'api', key: 'account-moonshot-key' } } },
+        active: { 'moonshotai-cn': 'acc-moonshot' }
+    }));
+    const db = new DatabaseSync(data.options.env.ULANZI_OPENCODE_DB);
+    db.exec('CREATE TABLE credential (id TEXT PRIMARY KEY, integration_id TEXT, label TEXT, value TEXT, connector_id TEXT, method_id TEXT, active INTEGER, time_created INTEGER, time_updated INTEGER)');
+    const insert = db.prepare('INSERT INTO credential (id, integration_id, value, active, time_updated) VALUES (?, ?, ?, ?, ?)');
+    insert.run('cred-moonshot', 'moonshotai-cn', JSON.stringify({ type: 'key', key: 'db-moonshot-key' }), 1, 10);
+    insert.run('cred-kimi', 'kimi-code-plan-cn', JSON.stringify({ type: 'key', key: 'db-kimi-key' }), 1, 10);
+    db.close();
+    const seen = {};
+    const kimiUsage = { usages: { limit_5h: { used_ratio: 0.5, reset_time: '2030-03-23T12:00:00Z' } } };
+    const result = await createUsageClient({ ...data.options, fetchImpl: async (url, options) => {
+        if (url.includes('kimi')) { seen[url] = options.headers.Authorization; return json(kimiUsage); }
+        if (url.includes('moonshot')) { seen[url] = options.headers.Authorization; return json({ code: 0, data: { available_balance: 5 } }); }
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    } })();
+    assert.equal(seen['https://api.moonshot.cn/v1/users/me/balance'], 'Bearer db-moonshot-key');
+    assert.equal(seen['https://api.kimi.com/coding/v1/usages'], 'Bearer db-kimi-key');
+    assert.ok(!seen['https://api.moonshot.ai/v1/users/me/balance']);
+    assert.equal(result.providers['moonshot-cn'].accounts[0].limits.balance.currency, 'CNY');
+    assert.equal(result.providers.moonshot.accounts[0].limits.balance.currency, 'CNY');
+    assert.equal(result.providers['kimi-code'].accounts[0].limits.five_hour.remaining_percent, 50);
+    assert.ok(!JSON.stringify(result).includes('-key'));
+});
 test('Go environment override, malformed windows and China credential isolation', async t => {
     const data = await setup(t);
     data.options.env.OPENCODE_GO_API_KEY = 'override-go';
