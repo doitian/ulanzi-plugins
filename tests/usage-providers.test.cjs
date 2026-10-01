@@ -135,6 +135,185 @@ test('OpenCode v2 stores also serve Moonshot and Kimi Code API keys', async t =>
     assert.equal(result.providers['kimi-code'].accounts[0].limits.five_hour.remaining_percent, 50);
     assert.ok(!JSON.stringify(result).includes('-key'));
 });
+const OPENCODE_GO_CONSOLE_VALUE = expires => ({
+    type: 'oauth', methodID: 'device', access: 'console-access', refresh: 'console-refresh',
+    expires, metadata: { server: 'https://console.test', orgID: 'org_1', orgName: 'Org' }
+});
+async function opencodeConsoleDb(t, file, value) {
+    let DatabaseSync;
+    try { ({ DatabaseSync } = require('node:sqlite')); } catch (_) { t.skip('node:sqlite unavailable'); return null; }
+    const db = new DatabaseSync(file);
+    db.exec('CREATE TABLE credential (id TEXT PRIMARY KEY, integration_id TEXT, label TEXT, value TEXT, connector_id TEXT, method_id TEXT, active INTEGER, time_created INTEGER, time_updated INTEGER)');
+    db.prepare('INSERT INTO credential (id, integration_id, value, active, time_updated) VALUES (?, ?, ?, ?, ?)')
+        .run('cred-1', 'opencode', JSON.stringify(value), 1, 1);
+    db.close();
+    return DatabaseSync;
+}
+test('OpenCode Go prefers the console OAuth login and sends the org header', async t => {
+    const data = await setup(t);
+    const dbFile = path.join(path.dirname(data.codexFile), 'opencode.db');
+    if (!await opencodeConsoleDb(t, dbFile, OPENCODE_GO_CONSOLE_VALUE(time + 3600000))) return;
+    data.options.env.ULANZI_OPENCODE_DB = dbFile;
+    const calls = [];
+    const result = await createUsageClient({ ...data.options, fetchImpl: async (url, options) => {
+        if (url === 'https://opencode.ai/inference/go/v1/usage') {
+            calls.push(options.headers);
+            return json({ usage: { rolling: { percent: 25, resetsAt: '2030-03-18T12:00:00Z' } } });
+        }
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    } })();
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].Authorization, 'Bearer console-access');
+    assert.equal(calls[0]['x-org-id'], 'org_1');
+    assert.equal(result.providers['opencode-go'].accounts[0].limits.rolling.remaining_percent, 75);
+    assert.ok(!JSON.stringify(result).includes('console-access'));
+});
+test('OpenCode Go refreshes an expiring console token and writes it back', async t => {
+    const data = await setup(t);
+    const dbFile = path.join(path.dirname(data.codexFile), 'opencode.db');
+    const DatabaseSync = await opencodeConsoleDb(t, dbFile, OPENCODE_GO_CONSOLE_VALUE(time - 1000));
+    if (!DatabaseSync) return;
+    data.options.env.ULANZI_OPENCODE_DB = dbFile;
+    const posts = [];
+    const result = await createUsageClient({ ...data.options, fetchImpl: async (url, options) => {
+        if (url === 'https://console.test/auth/device/token') {
+            assert.equal(options.method, 'POST');
+            assert.equal(options.headers['Content-Type'], 'application/json');
+            posts.push(JSON.parse(options.body));
+            return json({ access_token: 'rotated-console', refresh_token: 'rotated-refresh', expires_in: 3600, org_id: 'org_2' });
+        }
+        if (url === 'https://opencode.ai/inference/go/v1/usage') {
+            assert.equal(options.headers.Authorization, 'Bearer rotated-console');
+            return json({ usage: { rolling: { percent: 25, resetsAt: '2030-03-18T12:00:00Z' } } });
+        }
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    } })();
+    assert.deepEqual(posts, [{ grant_type: 'refresh_token', refresh_token: 'console-refresh', client_id: 'opencode-cli' }]);
+    assert.ok(result.providers['opencode-go'].accounts);
+    const db = new DatabaseSync(dbFile, { readonly: true });
+    const stored = JSON.parse(db.prepare("SELECT value FROM credential WHERE id = 'cred-1'").get().value);
+    db.close();
+    assert.equal(stored.access, 'rotated-console');
+    assert.equal(stored.refresh, 'rotated-refresh');
+    assert.equal(stored.expires, time + 3600000);
+    assert.equal(stored.metadata.orgID, 'org_2');
+    assert.equal(stored.metadata.orgName, 'org_2');
+    assert.equal(stored.type, 'oauth');
+    assert.ok(!JSON.stringify(result).includes('rotated-console'));
+});
+test('OpenCode Go keeps a newer console credential written during refresh', async t => {
+    const data = await setup(t);
+    const dbFile = path.join(path.dirname(data.codexFile), 'opencode.db');
+    const DatabaseSync = await opencodeConsoleDb(t, dbFile, OPENCODE_GO_CONSOLE_VALUE(time - 1000));
+    if (!DatabaseSync) return;
+    data.options.env.ULANZI_OPENCODE_DB = dbFile;
+    const result = await createUsageClient({ ...data.options, fetchImpl: async url => {
+        if (url === 'https://console.test/auth/device/token') {
+            const db = new DatabaseSync(dbFile);
+            db.prepare("UPDATE credential SET value = ? WHERE id = 'cred-1'").run(JSON.stringify({ type: 'oauth', access: 'newer-login' }));
+            db.close();
+            return json({ access_token: 'rotated-console', refresh_token: 'rotated-refresh', expires_in: 3600 });
+        }
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    } })();
+    assert.equal(result.providers['opencode-go'].error, 'credentials_changed');
+    const db = new DatabaseSync(dbFile, { readonly: true });
+    assert.equal(JSON.parse(db.prepare("SELECT value FROM credential WHERE id = 'cred-1'").get().value).access, 'newer-login');
+    db.close();
+});
+test('OpenCode Go refreshes the console token and retries once on 401', async t => {
+    const data = await setup(t);
+    const dbFile = path.join(path.dirname(data.codexFile), 'opencode.db');
+    if (!await opencodeConsoleDb(t, dbFile, OPENCODE_GO_CONSOLE_VALUE(time + 3600000))) return;
+    data.options.env.ULANZI_OPENCODE_DB = dbFile;
+    let attempts = 0, refreshes = 0;
+    const result = await createUsageClient({ ...data.options, fetchImpl: async (url, options) => {
+        if (url === 'https://console.test/auth/device/token') {
+            refreshes++;
+            return json({ access_token: 'console-rotated', expires_in: 3600 });
+        }
+        if (url === 'https://opencode.ai/inference/go/v1/usage') {
+            attempts++;
+            if (attempts === 1) return new Response('secret-body', { status: 401 });
+            assert.equal(options.headers.Authorization, 'Bearer console-rotated');
+            return json({ usage: { rolling: { percent: 25, resetsAt: '2030-03-18T12:00:00Z' } } });
+        }
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    } })();
+    assert.equal(attempts, 2);
+    assert.equal(refreshes, 1);
+    assert.equal(result.providers['opencode-go'].accounts[0].limits.rolling.remaining_percent, 75);
+    assert.ok(!JSON.stringify(result).includes('secret'));
+});
+test('OpenCode console reads and rotates through the spawned sqlite helper', async t => {
+    const data = await setup(t);
+    const dbFile = path.join(path.dirname(data.codexFile), 'opencode.db');
+    const DatabaseSync = await opencodeConsoleDb(t, dbFile, OPENCODE_GO_CONSOLE_VALUE(time - 1000));
+    if (!DatabaseSync) return;
+    // Ulanzi's bundled Node 20 has no node:sqlite; force the helper fallback.
+    data.options.env.ULANZI_OPENCODE_DB = dbFile;
+    data.options.env.ULANZI_SQLITE_HELPER = '1';
+    data.options.env.ULANZI_NODE = process.execPath;
+    const posts = [];
+    const result = await createUsageClient({ ...data.options, fetchImpl: async (url, options) => {
+        if (url === 'https://console.test/auth/device/token') {
+            posts.push(JSON.parse(options.body));
+            return json({ access_token: 'helper-rotated', refresh_token: 'helper-refresh', expires_in: 3600 });
+        }
+        if (url === 'https://opencode.ai/inference/go/v1/usage') {
+            assert.equal(options.headers.Authorization, 'Bearer helper-rotated');
+            assert.equal(options.headers['x-org-id'], 'org_1');
+            return json({ usage: { rolling: { percent: 25, resetsAt: '2030-03-18T12:00:00Z' } } });
+        }
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    } })();
+    assert.deepEqual(posts, [{ grant_type: 'refresh_token', refresh_token: 'console-refresh', client_id: 'opencode-cli' }]);
+    assert.equal(result.providers['opencode-go'].accounts[0].limits.rolling.remaining_percent, 75);
+    const db = new DatabaseSync(dbFile, { readonly: true });
+    const stored = JSON.parse(db.prepare("SELECT value FROM credential WHERE id = 'cred-1'").get().value);
+    db.close();
+    assert.equal(stored.access, 'helper-rotated');
+    assert.equal(stored.refresh, 'helper-refresh');
+    assert.ok(!JSON.stringify(result).includes('helper-rotated'));
+});
+test('OpenCode Go falls back to the API key when the console request fails', async t => {
+    const data = await setup(t);
+    const dir = path.dirname(data.codexFile);
+    const dbFile = path.join(dir, 'opencode.db');
+    if (!await opencodeConsoleDb(t, dbFile, OPENCODE_GO_CONSOLE_VALUE(time + 3600000))) return;
+    data.options.env.ULANZI_OPENCODE_DB = dbFile;
+    data.options.env.ULANZI_OPENCODE_AUTH = path.join(dir, 'auth.json');
+    await fs.writeFile(data.options.env.ULANZI_OPENCODE_AUTH, JSON.stringify({ 'opencode-go': { type: 'api', key: 'fallback-key' } }));
+    const urls = [];
+    const result = await createUsageClient({ ...data.options, fetchImpl: async (url, options) => {
+        if (url === 'https://opencode.ai/inference/go/v1/usage') { urls.push(url); return new Response('', { status: 500 }); }
+        if (url === 'https://opencode.ai/zen/go/v1/usage') {
+            urls.push(url);
+            assert.equal(options.headers.Authorization, 'Bearer fallback-key');
+            return json({ usage: { rolling: { percent: 25, resetsAt: '2030-03-18T12:00:00Z' } } });
+        }
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    } })();
+    assert.deepEqual(urls, ['https://opencode.ai/inference/go/v1/usage', 'https://opencode.ai/zen/go/v1/usage']);
+    assert.equal(result.providers['opencode-go'].accounts[0].limits.rolling.remaining_percent, 75);
+    assert.ok(!JSON.stringify(result).includes('fallback-key'));
+    await fs.unlink(data.options.env.ULANZI_OPENCODE_AUTH);
+    const failing = await createUsageClient({ ...data.options, fetchImpl: async url => {
+        if (url.includes('opencode.ai')) return new Response('', { status: 500 });
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    } })();
+    assert.equal(failing.providers['opencode-go'].error, 'request_failed');
+    data.options.env.OPENCODE_GO_API_KEY = 'override-key';
+    const overridden = await createUsageClient({ ...data.options, fetchImpl: async (url, options) => {
+        if (url.includes('opencode.ai')) {
+            assert.equal(url, 'https://opencode.ai/zen/go/v1/usage');
+            assert.equal(options.headers.Authorization, 'Bearer override-key');
+            return json({ usage: { rolling: { percent: 25, resetsAt: '2030-03-18T12:00:00Z' } } });
+        }
+        return json(url.includes('anthropic') ? claudeUsage : codexUsage);
+    } })();
+    assert.ok(overridden.providers['opencode-go'].accounts);
+});
 test('Go environment override, malformed windows and China credential isolation', async t => {
     const data = await setup(t);
     data.options.env.OPENCODE_GO_API_KEY = 'override-go';

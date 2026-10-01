@@ -115,10 +115,15 @@ written back atomically, preserving unrelated entries in the same file. API-key
 credentials cannot be refreshed; rotate them in OpenCode when they expire.
 
 For **OpenCode Go**, select **Rolling (5 hours)**, **Weekly**, or **Monthly**.
-Credentials come from the `opencode-go` account created by OpenCode `/connect`,
-or from the `OPENCODE_GO_API_KEY` user environment variable. The helper calls
-`https://opencode.ai/zen/go/v1/usage` and shows the remaining percentage and reset
-duration using the same colors as Claude/Codex.
+When you sign in to an OpenCode Console account in `opencode`, the helper uses
+that OAuth login from the v2 SQLite store (`opencode.db`, `credential` table),
+refreshing near-expiry tokens against the console and writing the rotated tokens
+back, and calls `https://opencode.ai/inference/go/v1/usage`. Otherwise — or if
+the console request fails — it falls back to the `opencode-go` API key created
+by OpenCode `/connect` against `https://opencode.ai/zen/go/v1/usage`. Set the
+`OPENCODE_GO_API_KEY` user environment variable to always use a specific key.
+The helper shows the remaining percentage and reset duration using the same
+colors as Claude/Codex.
 
 For **Moonshot China (CNY)**, choose **Balance**. It reads the `moonshotai-cn`
 API entry from OpenCode, or `MOONSHOT_CN_API_KEY`. It also accepts the existing
@@ -133,7 +138,11 @@ the early-v2 `account.json`, then the legacy v1 `auth.json` — v2 imports
 `auth.json` once and never writes it back. All three default to
 `$XDG_DATA_HOME/opencode` (`~/.local/share/opencode`). Set `ULANZI_OPENCODE_DB`,
 `ULANZI_OPENCODE_ACCOUNT`, or `ULANZI_OPENCODE_AUTH` to override the exact
-location. After setting persistent user environment variables, restart the
+location. SQLite access uses the built-in `node:sqlite` when available;
+Ulanzi's bundled Node 20 lacks it, so the bridge then runs the queries through
+the `node` found on `PATH` (set `ULANZI_NODE` to pick a specific binary) —
+without either, the v2 store is skipped and only `account.json`/`auth.json`
+are read. After setting persistent user environment variables, restart the
 shared bridge (or sign out and back in) for it to inherit them. After OpenCode
 `/connect`, the next automatic refresh reads the updated store without
 restarting the server.

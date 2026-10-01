@@ -1,9 +1,10 @@
-// Direct API contract follows ulanzi-studio-niri's ai_usage.py (8ff9e254).
+// Direct API contract follows ulanzi-studio-niri's ai_usage.py (fff7a7ed).
 // Credential contents and upstream response bodies must never be logged.
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { randomUUID } = require('node:crypto');
+const sqlite = require('./sqlite.cjs');
 
 const PROVIDERS = {
     claude: {
@@ -164,6 +165,7 @@ async function writeCredential(file, expectedRaw, data) {
 }
 
 function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl = fetch, now = Date.now } = {}) {
+    const sqliteContext = { env, cache: {} };
     const files = {
         claude: env.ULANZI_CLAUDE_CREDENTIALS || path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), '.credentials.json'),
         codex: env.ULANZI_CODEX_CREDENTIALS || path.join(env.CODEX_HOME || path.join(home, '.codex'), 'auth.json')
@@ -257,6 +259,10 @@ function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl =
             return { error: error instanceof UsageError ? error.code : 'request_failed' };
         }
     }
+    const OPENCODE_GO_USAGE_URL = 'https://opencode.ai/zen/go/v1/usage';
+    const OPENCODE_GO_CONSOLE_USAGE_URL = 'https://opencode.ai/inference/go/v1/usage';
+    const OPENCODE_CONSOLE_URL = 'https://opencode.ai/console';
+    const OPENCODE_CLIENT_ID = 'opencode-cli';
     const openCodeDir = () => path.join(env.XDG_DATA_HOME || path.join(home, '.local', 'share'), 'opencode');
     function apiKey(auth, name) {
         const entry = auth[name];
@@ -265,16 +271,17 @@ function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl =
     // OpenCode v2 keeps credentials in the SQLite credential table (opencode.db);
     // early v2 builds used account.json. auth.json is imported once and never
     // written back, so read the newer stores first for every integration.
-    async function openCodeDbApiKeys(names) {
+    async function openCodeDatabase() {
         const file = env.ULANZI_OPENCODE_DB || env.OPENCODE_DB || path.join(openCodeDir(), 'opencode.db');
         // Opening a missing database would create an empty file, so probe first.
-        try { await fs.stat(file); } catch (_) { return {}; }
-        let DatabaseSync;
-        try { ({ DatabaseSync } = require('node:sqlite')); } catch (_) { return {}; }
-        let db;
+        try { await fs.stat(file); } catch (_) { return null; }
+        return await sqlite.available(sqliteContext) ? { file } : null;
+    }
+    async function openCodeDbApiKeys(names) {
+        const database = await openCodeDatabase();
+        if (!database) return {};
         try {
-            db = new DatabaseSync(file, { readonly: true });
-            const rows = db.prepare(`SELECT integration_id, value, active, time_updated FROM credential WHERE integration_id IN (${names.map(() => '?').join(', ')})`).all(...names);
+            const rows = await sqlite.query(database.file, `SELECT integration_id, value, active, time_updated FROM credential WHERE integration_id IN (${names.map(() => '?').join(', ')})`, names, sqliteContext);
             const groups = {};
             for (const row of rows) {
                 try {
@@ -294,7 +301,6 @@ function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl =
             }
             return keys;
         } catch (_) { return {}; }
-        finally { try { db?.close(); } catch (_) {} }
     }
     async function openCodeAccountApiKeys(names) {
         const file = env.ULANZI_OPENCODE_ACCOUNT || path.join(openCodeDir(), 'account.json');
@@ -332,11 +338,93 @@ function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl =
         }
         return null;
     }
+    // The OpenCode Console login lives in the v2 credential table as the
+    // `opencode` integration's OAuth row; { file, id, raw, value }.
+    async function openCodeDbConsoleCredential() {
+        const database = await openCodeDatabase();
+        if (!database) return null;
+        try {
+            const rows = await sqlite.query(database.file, "SELECT id, value FROM credential WHERE integration_id = 'opencode' ORDER BY active DESC, time_updated DESC LIMIT 1", [], sqliteContext);
+            const row = rows[0];
+            if (!row) return null;
+            const value = JSON.parse(row.value);
+            if (!object(value) || value.type !== 'oauth') return null;
+            return { file: database.file, id: String(row.id), raw: String(row.value), value };
+        } catch (_) { throw new UsageError('auth_missing'); }
+    }
+    // Store a rotated console token unless OpenCode replaced the row meanwhile.
+    async function writeConsoleCredential(credential) {
+        const raw = JSON.stringify(credential.value);
+        let changes;
+        try {
+            changes = await sqlite.execute(credential.file, 'UPDATE credential SET value = ?, time_updated = ? WHERE id = ? AND value = ?', [raw, now(), credential.id, credential.raw], sqliteContext);
+        } catch (_) { throw new UsageError('credential_write_failed'); }
+        if (!changes) throw new UsageError('credentials_changed');
+        credential.raw = raw;
+    }
+    async function openCodeConsoleAccessToken(credential, { forceRefresh = false } = {}) {
+        const token = credential.value.access;
+        if (typeof token !== 'string' || !token) throw new UsageError('auth_missing');
+        const expires = typeof credential.value.expires === 'number' ? credential.value.expires : 0;
+        if (!forceRefresh && !(expires > 0 && expires <= now() + 30000)) return token;
+        const metadata = object(credential.value.metadata) ? { ...credential.value.metadata } : {};
+        const server = typeof metadata.server === 'string' && metadata.server ? metadata.server.replace(/\/+$/, '') : OPENCODE_CONSOLE_URL;
+        const result = await request(server + '/auth/device/token', {
+            method: 'POST',
+            headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                grant_type: 'refresh_token',
+                refresh_token: typeof credential.value.refresh === 'string' ? credential.value.refresh : '',
+                client_id: OPENCODE_CLIENT_ID
+            })
+        });
+        if (typeof result.access_token !== 'string' || !result.access_token) throw new UsageError('invalid_response');
+        if (typeof result.org_id === 'string' && result.org_id) {
+            if (metadata.orgID !== result.org_id) metadata.orgName = result.org_id;
+            metadata.orgID = result.org_id;
+        }
+        credential.value = {
+            ...credential.value,
+            access: result.access_token,
+            refresh: typeof result.refresh_token === 'string' && result.refresh_token ? result.refresh_token : credential.value.refresh,
+            expires: typeof result.expires_in === 'number' && result.expires_in > 0 ? now() + result.expires_in * 1000 : 0,
+            metadata
+        };
+        await writeConsoleCredential(credential);
+        return result.access_token;
+    }
+    // Go usage through the console login, refreshing once and retrying on 401.
+    async function openCodeGoConsoleUsage(credential) {
+        const metadata = object(credential.value.metadata) ? credential.value.metadata : {};
+        const extra = typeof metadata.orgID === 'string' && metadata.orgID ? { 'x-org-id': metadata.orgID } : {};
+        const usage = token => request(OPENCODE_GO_CONSOLE_USAGE_URL, { headers: { Accept: 'application/json', Authorization: 'Bearer ' + token, ...extra } });
+        try { return await usage(await openCodeConsoleAccessToken(credential)); }
+        catch (error) {
+            if (error.status !== 401) throw error;
+            return usage(await openCodeConsoleAccessToken(credential, { forceRefresh: true }));
+        }
+    }
+    async function openCodeGoApiKeyUsage() {
+        const key = (env.OPENCODE_GO_API_KEY || '').trim() || (await openCodeApiKey(['opencode-go']) || {}).key || '';
+        if (!key) throw new UsageError('auth_missing');
+        return request(OPENCODE_GO_USAGE_URL, { headers: { Accept: 'application/json', Authorization: 'Bearer ' + key } });
+    }
+    // OPENCODE_GO_API_KEY wins; otherwise the console login is used, falling
+    // back to the `opencode-go` API key when the console request fails.
+    async function openCodeGoUsageData() {
+        if ((env.OPENCODE_GO_API_KEY || '').trim()) return openCodeGoApiKeyUsage();
+        const credential = await openCodeDbConsoleCredential();
+        if (!credential) return openCodeGoApiKeyUsage();
+        try { return await openCodeGoConsoleUsage(credential); }
+        catch (error) {
+            const key = (await openCodeApiKey(['opencode-go']) || {}).key || '';
+            if (!key) throw error;
+            return request(OPENCODE_GO_USAGE_URL, { headers: { Accept: 'application/json', Authorization: 'Bearer ' + key } });
+        }
+    }
     async function openCodeGo() {
         try {
-            const key = (env.OPENCODE_GO_API_KEY || '').trim() || (await openCodeApiKey(['opencode-go']) || {}).key || '';
-            if (!key) throw new UsageError('auth_missing');
-            const data = await request('https://opencode.ai/zen/go/v1/usage', { headers: { Accept: 'application/json', Authorization: 'Bearer ' + key } });
+            const data = await openCodeGoUsageData();
             if (!object(data.usage)) throw new UsageError('invalid_response');
             const limits = {};
             for (const name of ['rolling', 'weekly', 'monthly']) {
