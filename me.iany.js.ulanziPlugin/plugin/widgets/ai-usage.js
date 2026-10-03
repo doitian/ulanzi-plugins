@@ -76,10 +76,12 @@ function selectUsage(data, settings) {
         if (typeof limit.used_percent !== 'number' || !Number.isFinite(limit.used_percent)) return { error: 'No usage data' };
         remaining = 100 - limit.used_percent;
     }
-    return { remaining: Math.max(0, Math.min(100, remaining)), reset: Date.parse(limit.resets_at) };
+    const resets = Number.isInteger(row.reset_credits) ? row.reset_credits : 0;
+    const resetExpiries = resets > 0 && Array.isArray(row.reset_expiries) ? row.reset_expiries.map(Date.parse).filter(Number.isFinite).sort((a, b) => a - b) : [];
+    return { remaining: Math.max(0, Math.min(100, remaining)), reset: Date.parse(limit.resets_at), resets, resetExpiries };
 }
 
-const COLORS = { gray: '#a0a0a0', green: '#00c850', yellow: '#f0be00', red: '#e63c32', blue: '#5aa0dc' };
+const COLORS = { gray: '#a0a0a0', green: '#00c850', yellow: '#f0be00', red: '#e63c32', blue: '#5aa0dc', white: '#ffffff' };
 function resetText(reset) {
     if (!Number.isFinite(reset)) return '';
     const seconds = Math.floor((reset - Date.now()) / 1000);
@@ -130,6 +132,31 @@ function drawBar(ctx, x, y, width, height, fraction, color) {
         ctx.fillStyle = color;
         ctx.fillRect(x, y + height - filled, width, filled);
     }
+}
+function resetColor(expiry, now) {
+    if (!Number.isFinite(expiry)) return COLORS.white;
+    const days = (expiry - (now || Date.now())) / 86400000;
+    return days <= 3 ? COLORS.red : days <= 7 ? COLORS.yellow : COLORS.white;
+}
+// One pip per banked reset, colored by its own expiry; more than three collapse to the earliest pip and a count.
+// The row shares the stale marker's line, so a stale marker follows the pips.
+function drawPips(ctx, count, expiries, stale) {
+    const shown = count > 3 ? 1 : count;
+    const label = count > 3 ? '×' + count : '';
+    ctx.font = '12px "Segoe UI", sans-serif';
+    const labelWidth = label ? ctx.measureText(label).width + 3 : 0;
+    ctx.font = '9px "Segoe UI", sans-serif';
+    const staleWidth = stale ? ctx.measureText('stale').width + 5 : 0;
+    let x = 72 - (shown * 12 - 5 + labelWidth + staleWidth) / 2 + 3.5;
+    for (let i = 0; i < shown; i++, x += 12) {
+        ctx.fillStyle = stale ? COLORS.gray : resetColor(expiries[i]);
+        ctx.beginPath(); ctx.arc(x, 104, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.textAlign = 'left';
+    x -= 8.5;
+    if (label) { ctx.font = '12px "Segoe UI", sans-serif'; ctx.fillText(label, x + 3, 104); x += labelWidth; }
+    if (stale) { ctx.fillStyle = COLORS.gray; ctx.font = '9px "Segoe UI", sans-serif'; ctx.fillText('stale', x + 5, 104); }
+    ctx.textAlign = 'center';
 }
 function drawFit(ctx, text, x, y, size, width) {
     do { ctx.font = size + 'px "Segoe UI", sans-serif'; size--; }
@@ -192,7 +219,8 @@ AiUsageWidget.prototype.getSnapshot = function () {
     const selected = source && source.data ? selectUsage(source.data, this.settings) : { error: source?.error || 'Loading...' };
     const usage = selected.error ? { error: selected.error }
         : typeof selected.amount === 'number' ? { remaining_amount: selected.amount, currency: selected.currency }
-        : { remaining_percent: selected.remaining, resets_at: Number.isFinite(selected.reset) ? new Date(selected.reset).toISOString() : null };
+        : { remaining_percent: selected.remaining, resets_at: Number.isFinite(selected.reset) ? new Date(selected.reset).toISOString() : null, reset_credits: selected.resets,
+            reset_expiries: selected.resetExpiries.map(expiry => new Date(expiry).toISOString()) };
     return {
         context: this.context,
         active: this.active,
@@ -241,8 +269,10 @@ AiUsageWidget.prototype.render = function () {
         drawBar(ctx, 4, 52, 8, 84, dials.usage, display.color);
         if (dials.time !== null) drawBar(ctx, 132, 52, 8, 84, dials.time, timeColor);
     }
+    const pips = usage.resets > 0 && (this.settings.limit || 'five_hour') === 'seven_day';
+    if (pips) drawPips(ctx, usage.resets, usage.resetExpiries, stale);
     // Keep a stale indication without replacing the reset/decimal footer.
-    if (stale) { ctx.fillStyle = COLORS.gray; ctx.font = '9px "Segoe UI", sans-serif'; ctx.fillText('stale', 72, 103); }
+    else if (stale) { ctx.fillStyle = COLORS.gray; ctx.font = '9px "Segoe UI", sans-serif'; ctx.fillText('stale', 72, 103); }
     $UD.setBaseDataIcon(this.context, this.canvas.toDataURL('image/png'), '');
 };
 window.AiUsageWidget = AiUsageWidget;
@@ -251,4 +281,5 @@ AiUsageWidget.selectUsage = selectUsage;
 AiUsageWidget.presentation = presentation;
 AiUsageWidget.balanceParts = balanceParts;
 AiUsageWidget.gauges = gauges;
+AiUsageWidget.resetColor = resetColor;
 }());

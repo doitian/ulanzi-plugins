@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { createUsageClient, claudeLimits, codexLimits, grokLimits, kimiCodeLimits } = require('../me.iany.js.ulanziPlugin/bridge/usage-providers.cjs');
+const { createUsageClient, claudeLimits, claudeResets, codexLimits, codexResets, grokLimits, kimiCodeLimits } = require('../me.iany.js.ulanziPlugin/bridge/usage-providers.cjs');
 const time = 1900000000000;
 const jwt = claims => 'header.' + Buffer.from(JSON.stringify(claims)).toString('base64url') + '.signature';
 const codexUsage = { rate_limit: {
@@ -545,6 +545,50 @@ test('fetches providers directly with their CLI tokens and does not expose crede
     assert.equal(result.providers.codex.accounts[0].email, 'active@example.com');
     assert.equal(result.providers.claude.accounts[0].limits.five_hour.remaining_percent, 73);
     assert.ok(!JSON.stringify(result).includes('refresh'));
+});
+test('banked resets come from cedar_ember grants and Codex reset credits, earliest expiry first', async t => {
+    const grant = { resets_left: 1, usable_now: true, paused: false, ends_at: '2030-03-20T00:00:00Z' };
+    assert.deepEqual(claudeResets({ cedar_ember: { eligible: true, grants: [grant, { ...grant, resets_left: 2, ends_at: '2030-03-19T00:00:00+00:00' },
+        { ...grant, resets_left: 1, ends_at: null }, { ...grant, usable_now: false }, { ...grant, paused: true },
+        { ...grant, resets_left: 0 }, { ...grant, resets_left: '1' }, null] } }),
+        { count: 4, expiries: ['2030-03-19T00:00:00.000Z', '2030-03-19T00:00:00.000Z', '2030-03-20T00:00:00.000Z'] });
+    for (const block of [{ eligible: false, grants: [grant] }, null, undefined]) assert.deepEqual(claudeResets({ cedar_ember: block }), { count: 0, expiries: [] });
+    const usage = { rate_limit_reset_credits: { available_count: 2 } };
+    assert.deepEqual(codexResets(usage), { count: 2, expiries: [] });
+    assert.deepEqual(codexResets(usage, { credits: [
+        { status: 'redeemed', expires_at: '2030-03-18T00:00:00Z' }, { status: 'available', expires_at: '2030-03-25T00:00:00Z' },
+        { status: 'available', expires_at: '2030-03-21T00:00:00Z' }, { status: 'available', expires_at: 'bad' }
+    ] }), { count: 2, expiries: ['2030-03-21T00:00:00.000Z', '2030-03-25T00:00:00.000Z'] });
+    for (const value of [{ available_count: -1 }, { available_count: '2' }, null, undefined]) assert.deepEqual(codexResets({ rate_limit_reset_credits: value }), { count: 0, expiries: [] });
+    const data = await setup(t);
+    for (const detailsOk of [true, false]) {
+        const urls = [];
+        const fetchImpl = async (url, options) => {
+            urls.push(url);
+            if (url.includes('anthropic.com')) {
+                assert.equal(url, 'https://api.anthropic.com/api/oauth/usage?cedar_ember=1');
+                assert.match(options.headers['User-Agent'], /^claude-cli\/\d+\.\d+\.\d+ \(external, cli\)$/);
+                return json({ ...claudeUsage, cedar_ember: { eligible: true, grants: [{ ...grant, id: 'secret-handle' }] } });
+            }
+            if (url.endsWith('/rate-limit-reset-credits')) {
+                assert.equal(options.headers['ChatGPT-Account-Id'], 'test-account');
+                return detailsOk ? json({ credits: [{ id: 'secret-credit', status: 'available', expires_at: '2030-03-21T00:00:00Z' }] }) : new Response('{}', { status: 500 });
+            }
+            return json({ ...codexUsage, rate_limit_reset_credits: { available_count: 1 } });
+        };
+        const result = await createUsageClient({ ...data.options, fetchImpl })();
+        assert.ok(urls.includes('https://chatgpt.com/backend-api/wham/rate-limit-reset-credits'));
+        assert.equal(result.providers.claude.accounts[0].reset_credits, 1);
+        assert.deepEqual(result.providers.claude.accounts[0].reset_expiries, ['2030-03-20T00:00:00.000Z']);
+        assert.equal(result.providers.codex.accounts[0].reset_credits, 1);
+        assert.deepEqual(result.providers.codex.accounts[0].reset_expiries, detailsOk ? ['2030-03-21T00:00:00.000Z'] : []);
+        assert.ok(!/secret-(handle|credit)/.test(JSON.stringify(result)));
+    }
+});
+test('Codex skips the reset credit call when nothing is banked', async t => {
+    const data = await setup(t); const urls = [];
+    await createUsageClient({ ...data.options, fetchImpl: async url => { urls.push(url); return json(url.includes('anthropic') ? claudeUsage : codexUsage); } })();
+    assert.ok(!urls.some(url => url.endsWith('/rate-limit-reset-credits')));
 });
 test('refreshes expired tokens and atomically preserves unrelated credential fields', async t => {
     const data = await setup(t);

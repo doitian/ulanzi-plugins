@@ -341,3 +341,44 @@ test('gauge styles draw only when selected, and never for hour windows', async (
         assert.equal(shapes.filter(shape => shape[0] === 'rect').length, rects, gauge + '/' + limit);
     }
 });
+test('7D keys show one pip per banked reset colored by expiry and collapse above three', async () => {
+    const { Widget } = runtime();
+    const now = Date.parse('2030-03-10T00:00:00Z');
+    const day = 86400000;
+    assert.equal(Widget.resetColor(now + 2 * day, now), '#e63c32');
+    assert.equal(Widget.resetColor(now + 3 * day, now), '#e63c32');
+    assert.equal(Widget.resetColor(now + 5 * day, now), '#f0be00');
+    assert.equal(Widget.resetColor(now + 7 * day, now), '#f0be00');
+    assert.equal(Widget.resetColor(now + 8 * day, now), '#ffffff');
+    assert.equal(Widget.resetColor(NaN, now), '#ffffff');
+    const data = sanitize({ providers: { codex: { accounts: [{ active: true, reset_credits: 2, reset_expiries: ['2030-03-20T00:00:00Z', 'bad', '2030-03-12T00:00:00Z'], limits: {
+        five_hour: { remaining_percent: 73 }, seven_day: { remaining_percent: 40 }
+    } }] }, claude: { accounts: [{ active: true, reset_credits: -1, reset_expiries: ['2030-03-12T00:00:00Z'], limits: { seven_day: { remaining_percent: 40 } } }] } } });
+    assert.deepEqual(data.providers.codex.accounts[0].reset_expiries, ['2030-03-20T00:00:00Z', '2030-03-12T00:00:00Z']);
+    assert.equal(data.providers.claude.accounts[0].reset_expiries, undefined);
+    const selected = Widget.selectUsage(data, { limit: 'seven_day' });
+    assert.equal(selected.resets, 2);
+    assert.deepEqual([...selected.resetExpiries], [Date.parse('2030-03-12T00:00:00Z'), Date.parse('2030-03-20T00:00:00Z')]);
+    assert.equal(Widget.selectUsage(data, { limit: 'five_hour' }).resets, 2);
+    assert.equal(Widget.selectUsage(data, { provider: 'claude', limit: 'seven_day' }).resets, 0);
+    const soon = new Date(Date.now() + day).toISOString();
+    const later = new Date(Date.now() + 30 * day).toISOString();
+    for (const [resets, expiries, colors, label, limit = 'seven_day'] of [
+        [0, [], [], null], [2, [later, soon], ['#e63c32', '#ffffff'], null], [3, [soon], ['#e63c32', '#ffffff', '#ffffff'], null], [5, [later, soon], ['#e63c32'], '×5'],
+        [2, [soon], [], null, 'five_hour']
+    ]) {
+        const limits = { [limit]: { remaining_percent: 40, resets_at: '2099-01-01T00:00:00Z' } };
+        const { Widget, shapes, texts } = runtime(async () => ({ ok: true, json: async () => ({ providers: { codex: { accounts: [{ active: true, reset_credits: resets, reset_expiries: expiries, limits }] } }, fetchedAt: Date.now() }) }));
+        const widget = new Widget('pips');
+        widget.updateSettings({ limit });
+        await widget.source.pending;
+        const fills = [];
+        widget.ctx.arc = function () { fills.push(this.fillStyle); };
+        texts.length = 0;
+        widget.render();
+        assert.deepEqual(fills, colors, limit + '/' + resets);
+        if (label) assert.ok(texts.includes(label));
+        assert.equal(widget.getSnapshot().usage.reset_credits, resets);
+        widget.destroy();
+    }
+});

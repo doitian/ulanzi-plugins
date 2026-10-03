@@ -10,6 +10,11 @@ function sanitize(data) {
     function account(row) {
         const result = { email: typeof row.email === 'string' ? row.email : '', active: row.active === true, limits: {} };
         if (row.error) result.error = safeError(row.error);
+        if (Number.isInteger(row.reset_credits) && row.reset_credits > 0) {
+            result.reset_credits = row.reset_credits;
+            result.reset_expiries = (Array.isArray(row.reset_expiries) ? row.reset_expiries : [])
+                .filter(value => typeof value === 'string' && Number.isFinite(Date.parse(value))).slice(0, row.reset_credits);
+        }
         for (const [key, value] of Object.entries(row.limits || {})) {
             if (!value || typeof value !== 'object') continue;
             result.limits[key] = {

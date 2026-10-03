@@ -38,6 +38,9 @@ root to install the collection.
 Shows Claude, Codex, xAI (Grok), or Kimi Code **remaining** usage percentage, or Moonshot account balance.
 Matches the reference layout: label at top left, provider icon at top right,
 large value in the center, and reset duration or balance decimals at the bottom. Add separate keys for the 5-hour and 7-day windows.
+Claude and Codex 7-day keys also show one pip per banked limit reset below the percentage
+(more than three collapse to `●×N`). Each pip is red when that reset expires within 3 days,
+yellow within 7 days, and white otherwise.
 Claude also supports `seven_day_fable` and `seven_day_sonnet` when returned
 by your plan. Missing limits/accounts show unavailable, never 100%.
 
@@ -166,7 +169,11 @@ as an optional match against the active Codex account, not an account switch.
 Claude does not report an email, so its single active account is used.
 
 The helper calls `https://chatgpt.com/backend-api/wham/usage` and
-`https://api.anthropic.com/api/oauth/usage`. Near-expiry access tokens are
+`https://api.anthropic.com/api/oauth/usage?cedar_ember=1`. Banked resets come from the
+Claude `cedar_ember` block (which requires a `claude-cli/<version> (external, cli)`
+User-Agent) and the Codex `rate_limit_reset_credits` count; when Codex reports any,
+`/backend-api/wham/rate-limit-reset-credits` adds their expiries. Redemption IDs are
+never kept. Near-expiry access tokens are
 refreshed using the CLI refresh token. Rotated credentials are saved by atomic
 file replacement, preserving unrelated fields and checking for intervening CLI
 changes before replacement. A usage HTTP 401 triggers one token refresh and
@@ -312,7 +319,12 @@ Example response:
       "context": "me.iany.ulanzistudio.js.aiUsage___key1___action1",
       "active": true,
       "settings": { "provider": "codex", "limit": "five_hour", "account": "", "label": "" },
-      "usage": { "remaining_percent": 73, "resets_at": "2026-09-18T12:00:00.000Z" },
+      "usage": {
+        "remaining_percent": 73,
+        "resets_at": "2026-09-18T12:00:00.000Z",
+        "reset_credits": 1,
+        "reset_expiries": ["2026-10-22T16:00:00.000Z"]
+      },
       "fetchedAt": 1789732800000,
       "stale": false,
       "error": null
@@ -325,7 +337,11 @@ The endpoint reads the same cached usage and account/window selection as each
 button; calling it does not trigger a provider request. Settings include effective
 provider/window defaults, the account filter (blank selects the active account),
 and the custom label. Balance windows return `remaining_amount` and `currency`
-instead of percentage/reset fields. Unavailable readings return `usage.error`,
+instead of percentage/reset fields. `reset_credits` is the account's number of
+banked limit resets (Claude and Codex; `0` elsewhere) for every window, and
+`reset_expiries` lists the known expiries earliest first; it can be shorter than
+the count when an expiry is unknown. In `GET /usage`, Claude and Codex accounts with
+banked resets carry the same `reset_credits` and `reset_expiries` fields. Unavailable readings return `usage.error`,
 including `Loading...` before the first fetch. `fetchedAt` is Unix milliseconds
 or `null` before data arrives; unknown reset times are `null`. `stale` indicates
 a helper error or data older than 35 minutes. The top-level per-instance `error`

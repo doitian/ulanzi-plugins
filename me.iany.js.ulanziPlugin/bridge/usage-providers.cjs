@@ -8,12 +8,13 @@ const sqlite = require('./sqlite.cjs');
 
 const PROVIDERS = {
     claude: {
-        usage: 'https://api.anthropic.com/api/oauth/usage',
+        usage: 'https://api.anthropic.com/api/oauth/usage?cedar_ember=1',
         token: 'https://platform.claude.com/v1/oauth/token',
         client: '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
     },
     codex: {
         usage: 'https://chatgpt.com/backend-api/wham/usage',
+        resetCredits: 'https://chatgpt.com/backend-api/wham/rate-limit-reset-credits',
         token: 'https://auth.openai.com/oauth/token',
         client: 'app_EMoamEEZ73f0CkXaXp7hrann'
     }
@@ -69,6 +70,33 @@ function codexLimits(data) {
         if (limit) limits[key] = limit;
     }
     return limits;
+}
+function isoTime(value) {
+    const timestamp = typeof value === 'number' ? value * 1000 : typeof value === 'string' ? Date.parse(value) : NaN;
+    return Number.isFinite(timestamp) && timestamp > 0 ? new Date(timestamp).toISOString() : null;
+}
+// Banked limit resets: a count plus the known expiries, earliest first.
+// Only grants the server marks usable right now are counted.
+function claudeResets(data) {
+    const block = data.cedar_ember;
+    const resets = { count: 0, expiries: [] };
+    if (!object(block) || block.eligible !== true || !Array.isArray(block.grants)) return resets;
+    for (const grant of block.grants) {
+        if (!object(grant) || grant.usable_now !== true || grant.paused === true || !Number.isInteger(grant.resets_left) || grant.resets_left <= 0) continue;
+        resets.count += grant.resets_left;
+        const expiry = isoTime(grant.ends_at);
+        if (expiry) resets.expiries.push(...Array(Math.min(grant.resets_left, 64)).fill(expiry));
+    }
+    resets.expiries = resets.expiries.sort().slice(0, resets.count);
+    return resets;
+}
+// The usage response only carries the count; expiries come from the optional credits call.
+function codexResets(data, details) {
+    const count = object(data.rate_limit_reset_credits) ? data.rate_limit_reset_credits.available_count : 0;
+    if (!Number.isInteger(count) || count <= 0) return { count: 0, expiries: [] };
+    const credits = object(details) && Array.isArray(details.credits) ? details.credits : [];
+    const expiries = credits.filter(credit => object(credit) && credit.status === 'available').map(credit => isoTime(credit.expires_at)).filter(Boolean);
+    return { count, expiries: expiries.sort().slice(0, count) };
 }
 function grokLimits(data) {
     const config = object(data.config) ? data.config : data;
@@ -232,17 +260,18 @@ function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl =
             const expires = name === 'claude' ? tokens().expiresAt : jwtClaims(accessToken()).exp * 1000;
             let refreshed = false;
             if (typeof expires === 'number' && expires > 0 && expires <= now() + 30000) { await refresh(); refreshed = true; }
-            async function usageRequest() {
+            async function usageRequest(url = config.usage) {
                 const token = accessToken();
                 if (typeof token !== 'string' || !token) throw new UsageError('auth_missing');
                 const headers = { Accept: 'application/json', Authorization: 'Bearer ' + token, 'User-Agent': 'ulanzi-js-widgets/1.0' };
                 if (name === 'claude') {
                     headers['Anthropic-Beta'] = 'oauth-2025-04-20';
-                    headers['User-Agent'] = 'claude-code/0.0.0-dev';
+                    // cedar_ember is only returned to a released claude-cli >= 2.1.280 in this exact UA shape.
+                    headers['User-Agent'] = 'claude-cli/2.1.288 (external, cli)';
                 } else if (typeof tokens().account_id === 'string' && tokens().account_id) {
                     headers['ChatGPT-Account-Id'] = tokens().account_id;
                 }
-                return request(config.usage, { headers });
+                return request(url, { headers });
             }
             let data;
             try { data = await usageRequest(); }
@@ -254,7 +283,11 @@ function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl =
             const limits = name === 'claude' ? claudeLimits(data) : codexLimits(data);
             if (!Object.keys(limits).length) throw new UsageError('invalid_response');
             const email = name === 'codex' ? jwtClaims(tokens().id_token || '').email : '';
-            return { accounts: [{ email: typeof email === 'string' ? email : '', active: true, limits }] };
+            let resets = name === 'claude' ? claudeResets(data) : codexResets(data);
+            if (name === 'codex' && resets.count > 0) {
+                try { resets = codexResets(data, await usageRequest(config.resetCredits)); } catch (_) { /* The count stands without expiries. */ }
+            }
+            return { accounts: [{ email: typeof email === 'string' ? email : '', active: true, limits, reset_credits: resets.count, reset_expiries: resets.expiries }] };
         } catch (error) {
             return { error: error instanceof UsageError ? error.code : 'request_failed' };
         }
@@ -604,4 +637,4 @@ function createUsageClient({ env = process.env, home = os.homedir(), fetchImpl =
         return { providers: { claude, codex, 'opencode-go': go, moonshot: balance, 'moonshot-cn': china, xai, 'kimi-code': kimi } };
     };
 }
-module.exports = { createUsageClient, claudeLimits, codexLimits, grokLimits, kimiCodeLimits, writeCredential };
+module.exports = { createUsageClient, claudeLimits, claudeResets, codexLimits, codexResets, grokLimits, kimiCodeLimits, writeCredential };
