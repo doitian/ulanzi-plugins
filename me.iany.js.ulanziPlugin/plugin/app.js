@@ -83,6 +83,20 @@ $UD.onSendToPlugin((jsn) => {
             .then((response) => response.ok ? response.json() : { error: 'offline' })
             .then((data) => reply({ aliases: data.aliases || {} }))
             .catch(() => reply({ aliases: {} }));
+    } else if (request.command === 'getUsageOptions') {
+        bridgeFetch(BRIDGE_BASE + '/usage/options')
+            .then((response) => response.ok ? response.json() : { error: 'offline' })
+            .then((data) => reply({ proxy: data.proxy || '', error: data.error || null }))
+            .catch(() => reply({ proxy: '', error: 'offline' }));
+    } else if (request.command === 'setUsageOptions') {
+        bridgeFetch(BRIDGE_BASE + '/usage/options/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ proxy: typeof request.proxy === 'string' ? request.proxy : '' })
+        })
+            .then((response) => response.ok ? response.json() : { error: 'offline' })
+            .then((data) => reply({ proxy: (data.options && data.options.proxy) || '', error: data.error || null }))
+            .catch(() => reply({ error: 'offline' }));
     } else if (request.command === 'setAliases') {
         bridgeFetch(BRIDGE_BASE + '/sound-switch/aliases/save', {
             method: 'POST',

@@ -1,5 +1,6 @@
 // AI usage route: cache and provider logic only; server.cjs owns HTTP.
 const { createUsageClient } = require('./usage-providers.cjs');
+const { createProxyFetch } = require('./proxy-fetch.cjs');
 
 const ERROR_CODES = new Set(['auth_missing', 'auth_denied', 'rate_limited', 'timeout', 'invalid_response', 'credentials_changed', 'credential_write_failed', 'request_failed']);
 function safeError(error) { return ERROR_CODES.has(error) ? error : 'request_failed'; }
@@ -39,7 +40,8 @@ function sanitize(data) {
     return { providers };
 }
 
-function createUsageRoute({ run = createUsageClient(), now = Date.now } = {}) {
+function createUsageRoute({ run, now = Date.now, optionsStore = { read: () => ({}) } } = {}) {
+    const runner = run || createUsageClient({ fetchImpl: createProxyFetch({ optionsStore }) });
     let cache = null;
     let pending = null;
     let lastAttempt = -Infinity;
@@ -54,7 +56,7 @@ function createUsageRoute({ run = createUsageClient(), now = Date.now } = {}) {
         lastAttempt = now();
         pending = Promise.resolve().then(async () => {
             try {
-                const data = sanitize(await run());
+                const data = sanitize(await runner());
                 cache = { ...data, fetchedAt: now() };
                 lastError = null;
                 return cache;

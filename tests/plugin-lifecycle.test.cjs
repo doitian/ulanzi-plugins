@@ -21,7 +21,8 @@ test('Ulanzi launch starts the bridge, renders widgets, and exits with the host'
             ULANZI_OPENCODE_ACCOUNT: path.join(__dirname, 'missing-account.json'),
             ULANZI_GROK_CREDENTIALS: path.join(__dirname, 'missing-auth.json'),
             MOONSHOT_API_KEY: '', MOONSHOT_CN_API_KEY: '', OPENCODE_GO_API_KEY: '',
-            ULANZI_AGENT_BERTH: path.join(__dirname, 'missing-agent-berth')
+            ULANZI_AGENT_BERTH: path.join(__dirname, 'missing-agent-berth'),
+            ULANZI_USAGE_OPTIONS: path.join(__dirname, 'missing-usage-options.json')
         }, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore']
     });
     t.after(() => { child.kill(); for (const client of host.clients) client.terminate(); host.close(); });

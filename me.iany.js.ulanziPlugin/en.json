@@ -59,6 +59,8 @@
     "Press URL": "Press URL",
     "Leave blank to open the provider's default usage page.": "Leave blank to open the provider's default usage page.",
     "Usage refreshes automatically. Press to open the page and refresh.": "Usage refreshes automatically. Press to open the page and refresh.",
+    "HTTP proxy": "HTTP proxy",
+    "Shared by all AI usage keys. When set, usage API traffic goes through this proxy only; if it is down, requests fail instead of connecting directly.": "Shared by all AI usage keys. When set, usage API traffic goes through this proxy only; if it is down, requests fail instead of connecting directly.",
     "Agent": "Agent",
     "All agents": "All agents",
     "All agents sums the sessions of every agent-berth provider.": "All agents sums the sessions of every agent-berth provider.",

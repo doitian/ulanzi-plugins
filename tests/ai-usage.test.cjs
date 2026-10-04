@@ -4,6 +4,9 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 const { createUsageRoute, sanitize } = require('../me.iany.js.ulanziPlugin/bridge/ai-usage.cjs');
+const { sanitizeOptions } = require('../me.iany.js.ulanziPlugin/bridge/usage-options.cjs');
+const { createProxyFetch } = require('../me.iany.js.ulanziPlugin/bridge/proxy-fetch.cjs');
+const http = require('node:http');
 const { createServer, createRoutes } = require('../me.iany.js.ulanziPlugin/bridge/server.cjs');
 const root = path.join(__dirname, '../me.iany.js.ulanziPlugin');
 const fixture = { providers: {
@@ -254,6 +257,79 @@ test('refresh endpoint shares the usage cache, throttle and in-flight requests',
     assert.equal(calls, 4);
 });
 
+test('usage options are trimmed, typed and bounded', () => {
+    assert.deepEqual(sanitizeOptions(null), { proxy: '' });
+    assert.deepEqual(sanitizeOptions('http://127.0.0.1:7890'), { proxy: '' });
+    assert.deepEqual(sanitizeOptions({ proxy: 7890 }), { proxy: '' });
+    assert.deepEqual(sanitizeOptions({ proxy: '  http://127.0.0.1:7890  ' }), { proxy: 'http://127.0.0.1:7890' });
+    assert.equal(sanitizeOptions({ proxy: 'x'.repeat(500) }).proxy.length, 300);
+});
+test('invalid proxies reject before any request is made', async () => {
+    const calls = [];
+    const fetchImpl = async (...args) => { calls.push(args); return { ok: true }; };
+    let stored = { proxy: 'not a url' };
+    const proxyFetch = createProxyFetch({ optionsStore: { read: () => stored }, fetchImpl });
+    await assert.rejects(proxyFetch('https://api.example.com/usage'), /invalid_proxy/);
+    stored = { proxy: 'socks5://127.0.0.1:1080' };
+    await assert.rejects(proxyFetch('https://api.example.com/usage'), /invalid_proxy/);
+    assert.equal(calls.length, 0);
+});
+test('a configured proxy tunnels https requests and never falls back to direct', async t => {
+    const seen = [];
+    const proxy = http.createServer();
+    proxy.on('connect', (req, socket) => { seen.push(req.url); socket.destroy(); });
+    await new Promise(resolve => proxy.listen(0, '127.0.0.1', resolve));
+    t.after(() => new Promise(resolve => { proxy.close(resolve); proxy.closeAllConnections(); }));
+    let stored = { proxy: 'http://127.0.0.1:' + proxy.address().port };
+    const calls = [];
+    const fetchImpl = async (...args) => { calls.push(args); return { ok: true }; };
+    const proxyFetch = createProxyFetch({ optionsStore: { read: () => stored }, fetchImpl });
+    // The tunnel fails after CONNECT here; what matters is the proxy saw it.
+    await assert.rejects(proxyFetch('https://api.example.com/usage'));
+    assert.deepEqual(seen, ['api.example.com:443']);
+    assert.equal(calls.length, 0);
+    // Plain-http targets fail closed instead of bypassing the tunnel.
+    await assert.rejects(proxyFetch('http://api.example.com/usage'), /invalid_request/);
+    assert.deepEqual(seen, ['api.example.com:443']);
+    // Without a proxy the direct fetch implementation is used untouched.
+    stored = { proxy: '' };
+    await proxyFetch('https://api.example.com/usage');
+    assert.equal(calls.length, 1);
+    assert.deepEqual(seen, ['api.example.com:443']);
+    // A dead proxy rejects instead of going direct.
+    stored = { proxy: 'http://127.0.0.1:1' };
+    await assert.rejects(proxyFetch('https://api.example.com/usage'));
+    assert.equal(calls.length, 1);
+    assert.deepEqual(seen, ['api.example.com:443']);
+});
+test('proxy credentials are sent as basic proxy authorization', async t => {
+    let authorization = null;
+    const proxy = http.createServer();
+    proxy.on('connect', (req, socket) => { authorization = req.headers['proxy-authorization'] || null; socket.destroy(); });
+    await new Promise(resolve => proxy.listen(0, '127.0.0.1', resolve));
+    t.after(() => new Promise(resolve => { proxy.close(resolve); proxy.closeAllConnections(); }));
+    const stored = { proxy: 'http://user:pass@127.0.0.1:' + proxy.address().port };
+    const proxyFetch = createProxyFetch({ optionsStore: { read: () => stored }, fetchImpl: async () => ({ ok: true }) });
+    await assert.rejects(proxyFetch('https://api.example.com/usage'));
+    assert.equal(authorization, 'Basic ' + Buffer.from('user:pass').toString('base64'));
+});
+test('usage options round-trip through the shared bridge routes', async t => {
+    let stored = { proxy: '' };
+    const optionsStore = { read: () => stored, write: options => { stored = sanitizeOptions(options); return stored; } };
+    const server = createServer({ routes: createRoutes({ optionsStore, usageRoute: createUsageRoute({ run: async () => fixture }) }) });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections(); }));
+    const base = 'http://127.0.0.1:' + server.address().port;
+    const headers = { 'X-Ulanzi-Bridge': '1', Origin: 'null' };
+    assert.deepEqual(await (await fetch(base + '/usage/options', { headers })).json(), { proxy: '' });
+    const saved = await fetch(base + '/usage/options/save', { method: 'POST', headers, body: JSON.stringify({ proxy: ' http://127.0.0.1:7890 ' }) });
+    assert.equal(saved.status, 200);
+    assert.deepEqual((await saved.json()).options, { proxy: 'http://127.0.0.1:7890' });
+    assert.deepEqual(await (await fetch(base + '/usage/options', { headers })).json(), { proxy: 'http://127.0.0.1:7890' });
+    assert.equal((await fetch(base + '/usage/options/save', { headers })).status, 405);
+    assert.equal((await fetch(base + '/usage/options', { method: 'POST', headers })).status, 405);
+    assert.equal((await fetch(base + '/usage/options')).status, 403);
+});
 test('helper excludes secrets and isolates provider errors', () => {
     const output = sanitize({ providers: { codex: fixture.providers.codex, claude: { error: 'secret token' } }, token: 'secret' });
     assert.ok(!JSON.stringify(output).includes('secret'));

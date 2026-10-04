@@ -1,15 +1,18 @@
 // Shared local HTTP server for all widget types. Run: node bridge/server.cjs
 const http = require('node:http');
 const { createUsageRoute } = require('./ai-usage.cjs');
+const { createOptionsStore } = require('./usage-options.cjs');
 const { createAgentsRoute } = require('./agent-status.cjs');
 const { createSoundSwitchRoutes } = require('./sound-switch.cjs');
 
-function createRoutes({ getInstances = () => [], usageRoute = createUsageRoute(), agentsRoute = createAgentsRoute(), soundSwitch = createSoundSwitchRoutes() } = {}) {
+function createRoutes({ getInstances = () => [], optionsStore = createOptionsStore(), usageRoute = createUsageRoute({ optionsStore }), agentsRoute = createAgentsRoute(), soundSwitch = createSoundSwitchRoutes() } = {}) {
     return new Map([
         ['/health', async () => ({ service: 'me.iany.ulanzistudio.js.bridge' })],
         ['/usage/fetch', () => ({ instances: getInstances() })],
         ['/usage', usageRoute],
         ['/usage/refresh', url => usageRoute(url, true)],
+        ['/usage/options', () => optionsStore.read()],
+        ['/usage/options/save', (url, body) => ({ ok: true, options: optionsStore.write(body) })],
         ['/agents', agentsRoute],
         ['/sound-switch/status', soundSwitch.status],
         ['/sound-switch/mute', soundSwitch.mute],
@@ -21,7 +24,7 @@ function createRoutes({ getInstances = () => [], usageRoute = createUsageRoute()
     ]);
 }
 
-const POST_PATHS = new Set(['/usage/refresh', '/sound-switch/aliases/save', '/sound-switch/run']);
+const POST_PATHS = new Set(['/usage/refresh', '/usage/options/save', '/sound-switch/aliases/save', '/sound-switch/run']);
 
 function readBody(req, limit = 1 << 20) {
     return new Promise((resolve, reject) => {

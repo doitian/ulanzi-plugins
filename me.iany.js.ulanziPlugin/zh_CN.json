@@ -59,6 +59,8 @@
     "Press URL": "按键打开的 URL",
     "Leave blank to open the provider's default usage page.": "留空打开提供商的默认用量页面。",
     "Usage refreshes automatically. Press to open the page and refresh.": "用量会自动刷新。按键打开页面并刷新用量。",
+    "HTTP proxy": "HTTP 代理",
+    "Shared by all AI usage keys. When set, usage API traffic goes through this proxy only; if it is down, requests fail instead of connecting directly.": "该设置由所有 AI 用量按键共享。设置后，用量 API 流量仅经由该代理发送；代理不可用时请求将失败，而不会直接连接。",
     "Agent": "智能体",
     "All agents": "全部智能体",
     "All agents sums the sessions of every agent-berth provider.": "“全部智能体”汇总 agent-berth 中所有提供方的会话。",
