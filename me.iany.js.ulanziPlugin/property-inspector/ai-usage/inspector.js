@@ -12,17 +12,20 @@ function saveProxy() {
 }
 function applySettings() {
     if (!form) return;
-    Utils.setFormValue(Object.assign({ provider: 'codex', limit: 'five_hour', account: '', label: '', url: '', gauge: 'none' }, settings), form);
+    Utils.setFormValue(Object.assign({ provider: 'codex', limit: 'five_hour', account: '', label: '', url: '', gauge: 'none', aliyunInstanceId: '', aliyunAccessKeyId: '', aliyunAccessKeySecret: '' }, settings), form);
     updateWindows();
 }
 function updateWindows() {
     const provider = form.elements.provider.value;
+    document.getElementById('aliyun-settings').hidden = provider !== 'aliyun';
+    document.getElementById('cli-hint').hidden = provider === 'aliyun';
     const windows = {
         codex: ['five_hour', 'seven_day'],
         claude: ['five_hour', 'seven_day', 'seven_day_fable', 'seven_day_sonnet'],
         'opencode-go': ['rolling', 'weekly', 'monthly'],
         xai: ['weekly'],
         'kimi-code': ['five_hour', 'monthly'],
+        aliyun: ['monthly'],
         moonshot: ['balance'], 'moonshot-cn': ['balance']
     }[provider] || ['five_hour', 'seven_day'];
     for (const option of form.elements.limit.options) option.disabled = !windows.includes(option.value);

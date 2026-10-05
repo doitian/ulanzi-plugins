@@ -35,7 +35,7 @@ root to install the collection.
 
 ### AI Usage
 
-Shows Claude, Codex, xAI (Grok), or Kimi Code **remaining** usage percentage, or Moonshot account balance.
+Shows Claude, Codex, xAI (Grok), or Kimi Code **remaining** usage percentage, Moonshot account balance, or an Aliyun savings plan's remaining balance.
 Matches the reference layout: label at top left, provider icon at top right,
 large value in the center, and reset duration or balance decimals at the bottom. Add separate keys for the 5-hour and 7-day windows.
 Claude and Codex 7-day keys also show one pip per banked limit reset below the percentage
@@ -85,6 +85,7 @@ and also request a forced usage refresh. Refreshes share the existing
 | Kimi Code | `https://www.kimi.com/code/console` |
 | xAI (Grok) | `https://grok.com/?_s=usage` |
 | Moonshot / Moonshot China | `https://platform.kimi.com/console/account` |
+| Aliyun Savings Plan | `https://usercenter2.aliyun.com/` |
 
 Percentage colors match the reference: green at 60% or more, yellow from 30%,
 and red below 30%; missing data is gray. Errors display a red code. Retained
@@ -127,6 +128,32 @@ by OpenCode `/connect` against `https://opencode.ai/zen/go/v1/usage`. Set the
 `OPENCODE_GO_API_KEY` user environment variable to always use a specific key.
 The helper shows the remaining percentage and reset duration using the same
 colors as Claude/Codex.
+
+For **Aliyun Savings Plan**, enter **Instance ID**, **Access Key ID**, and
+**Access Key Secret** in the widget settings. The only usage window is **Monthly**.
+The helper signs a read-only `QuerySavingsPlansInstance` request (BssOpenApi
+`2017-12-14`) to `https://business.aliyuncs.com/` and selects the exact instance.
+Grant the RAM user permission for this operation. No environment variables or
+CLI login are required. Keys are saved in the host's per-widget settings
+(the secret field is masked, not encrypted); avoid sharing settings exports.
+They are sent only in a local POST body, never a URL, usage response, or log.
+
+The balance is `RestPoolValue`, with the currency reported by the API. The key
+shows the whole-number balance in the center and the reset countdown at the bottom,
+instead of balance decimals.
+Resets follow calendar-month anniversaries of `StartTime` in China time (UTC+8),
+not fixed 30-day intervals. Short months clamp to their last day without shifting
+subsequent anniversaries. For example, a September 26 10:00 start resets on
+October 26 10:00, November 26 10:00, and so on. Optional side bars compare the
+balance against `CurrentPoolValue` (falling back to `PoolValue`) and use the
+actual calendar-month duration for time remaining. Missing instances or invalid
+balances show an error, never a fabricated balance.
+
+Aliyun keys with identical credentials and instance ID share their own cache;
+different configurations are isolated. They follow the same 30-minute cache and
+90-second refresh throttle and use the shared HTTP proxy. Changing instance or
+credentials immediately switches to a separate reading, without retaining the
+old instance's balance.
 
 For **Moonshot China (CNY)**, choose **Balance**. It reads the `moonshotai-cn`
 API entry from OpenCode, or `MOONSHOT_CN_API_KEY`. It also accepts the existing
@@ -178,9 +205,10 @@ refreshed using the CLI refresh token. Rotated credentials are saved by atomic
 file replacement, preserving unrelated fields and checking for intervening CLI
 changes before replacement. A usage HTTP 401 triggers one token refresh and
 retry; HTTP 403 and 429 are not retried immediately. Credentials stay in the
-helper and never enter widget settings, local HTTP responses, or logs.
+helper and never enter widget settings, local HTTP responses, or logs
+(except Aliyun access keys, which are explicitly configured in widget settings).
 
-All keys share a 30-minute cache; the widget checks the helper every minute.
+CLI/environment-backed keys share a 30-minute cache; the widget checks the helper every minute.
 Pressing a key opens its usage page in your browser and requests an earlier fetch. Providers
 are fetched concurrently, and one provider's failure does not hide the other's
 usage. Failed providers are displayed as unavailable with a login, rate-limit,
@@ -337,7 +365,8 @@ The endpoint reads the same cached usage and account/window selection as each
 button; calling it does not trigger a provider request. Settings include effective
 provider/window defaults, the account filter (blank selects the active account),
 and the custom label. Balance windows return `remaining_amount` and `currency`
-instead of percentage/reset fields. `reset_credits` is the account's number of
+instead of percentage fields; Aliyun monthly balances also include `resets_at`.
+Access keys and secrets are excluded from instance snapshots. `reset_credits` is the account's number of
 banked limit resets (Claude and Codex; `0` elsewhere) for every window, and
 `reset_expiries` lists the known expiries earliest first; it can be shorter than
 the count when an expiry is unknown. In `GET /usage`, Claude and Codex accounts with
@@ -350,9 +379,11 @@ An empty configuration returns `{ "instances": [] }`.
 
 ### Refresh AI usage
 
-`POST /usage/refresh` requests fresh usage from all providers and returns the same
+`POST /usage/refresh` requests fresh usage from CLI/environment-backed providers and returns the same
 sanitized `{ "providers": { ... }, "fetchedAt": ... }` response as `GET /usage`.
-No request body is needed. It bypasses the 30-minute cache while respecting the
+No request body is needed. Aliyun widgets instead POST their per-widget
+configuration to `/usage/aliyun` (with `?refresh=1` for a forced refresh).
+It bypasses the 30-minute cache while respecting the
 shared 90-second throttle: requests within that interval return the cached data
 or the previous helper error. Concurrent refreshes share one in-flight request.
 Helper failures return HTTP 503; individual provider errors appear in `providers`.

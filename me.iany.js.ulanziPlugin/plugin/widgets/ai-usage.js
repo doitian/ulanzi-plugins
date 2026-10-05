@@ -11,12 +11,14 @@ const PROVIDER_URLS = {
     moonshot: 'https://platform.kimi.com/console/account',
     'moonshot-cn': 'https://platform.kimi.com/console/account',
     'kimi-code': 'https://www.kimi.com/code/console',
-    xai: 'https://grok.com/?_s=usage'
+    xai: 'https://grok.com/?_s=usage',
+    aliyun: 'https://usercenter2.aliyun.com/'
 };
 
-function sourceFor(url) {
-    if (sources.has(url)) return sources.get(url);
-    const source = { listeners: new Set(), data: null, error: '', pending: null };
+function sourceFor(url, config) {
+    const key = url + (config ? JSON.stringify(config) : '');
+    if (sources.has(key)) return sources.get(key);
+    const source = { key, listeners: new Set(), data: null, error: '', pending: null };
     source.refresh = function (force) {
         if (source.pending) return source.pending;
         const controller = new AbortController();
@@ -29,7 +31,8 @@ function sourceFor(url) {
                 }
                 if (force) target.searchParams.set('refresh', '1');
                 const response = await fetch(target.href, {
-                    headers: { 'X-Ulanzi-Bridge': '1' }, signal: controller.signal, cache: 'no-store'
+                    headers: { 'X-Ulanzi-Bridge': '1' }, signal: controller.signal, cache: 'no-store',
+                    ...(config ? { method: 'POST', body: JSON.stringify(config) } : {})
                 });
                 if (!response.ok) throw new Error('Helper error');
                 const data = await response.json();
@@ -47,17 +50,21 @@ function sourceFor(url) {
         return source.pending;
     };
     source.timer = setInterval(() => source.refresh(false), 60000);
-    sources.set(url, source);
+    sources.set(key, source);
     return source;
 }
 
 function selectUsage(data, settings) {
     const provider = data && data.providers[settings.provider || 'codex'];
     if (!provider) return { error: 'No provider data' };
+    if (provider.error && settings.provider === 'aliyun' && ['auth_missing', 'auth_denied'].includes(provider.error)) {
+        return { error: provider.error === 'auth_missing' ? 'Access keys required' : 'Access denied' };
+    }
     if (provider.error) return { error: {
         auth_missing: 'CLI login required', auth_denied: 'Login expired',
         rate_limited: 'Rate limited', timeout: 'API timeout',
-        credentials_changed: 'Login changed - retry', credential_write_failed: 'Credential save failed'
+        credentials_changed: 'Login changed - retry', credential_write_failed: 'Credential save failed',
+        instance_missing: 'Instance ID required', instance_not_found: 'Instance not found'
     }[provider.error] || 'API unavailable' };
     const email = (settings.account || '').trim().toLowerCase();
     const row = Array.isArray(provider.accounts)
@@ -69,7 +76,9 @@ function selectUsage(data, settings) {
     const limit = row.limits && row.limits[settings.limit || 'five_hour'];
     if (!limit) return { error: 'No limit data' };
     if (typeof limit.remaining_amount === 'number' && Number.isFinite(limit.remaining_amount)) {
-        return { amount: limit.remaining_amount, currency: limit.currency || '' };
+        return { amount: limit.remaining_amount, currency: limit.currency || '', reset: Date.parse(limit.resets_at),
+            windowStart: Date.parse(limit.window_starts_at),
+            ...(typeof limit.remaining_percent === 'number' && Number.isFinite(limit.remaining_percent) ? { remaining: limit.remaining_percent } : {}) };
     }
     let remaining = limit.remaining_percent;
     if (typeof remaining !== 'number' || !Number.isFinite(remaining)) {
@@ -106,12 +115,13 @@ function balanceParts(amount, currency) {
 }
 function presentation(usage, stale) {
     if (usage.error) {
-        const code = { 'CLI login required': '401', 'Login expired': '401', 'Login / retry': '401', 'Rate limited': '429', 'API timeout': 'TO' }[usage.error];
+        const code = { 'CLI login required': '401', 'Login expired': '401', 'Login / retry': '401', 'Access keys required': '401', 'Access denied': '401', 'Rate limited': '429', 'API timeout': 'TO' }[usage.error];
         const missing = ['No provider data', 'No account', 'No limit data', 'No usage data', 'Loading...'].includes(usage.error);
         return { center: code || (missing ? 'n/a' : 'Err'), footer: '', color: missing ? COLORS.gray : COLORS.red };
     }
     const balance = typeof usage.amount === 'number';
     const parts = balance ? balanceParts(usage.amount, usage.currency) : [Math.round(usage.remaining) + '%', resetText(usage.reset)];
+    if (balance && Number.isFinite(usage.reset)) parts[1] = resetText(usage.reset);
     const thresholds = balance ? (usage.currency === 'CNY' ? [70, 36] : [12, 6]) : [60, 30];
     const value = balance ? usage.amount : usage.remaining;
     return { center: parts[0], footer: parts[1], color: stale ? COLORS.gray : value >= thresholds[0] ? COLORS.green : value >= thresholds[1] ? COLORS.yellow : COLORS.red };
@@ -121,7 +131,8 @@ const LIMIT_DAYS = { seven_day: 7, seven_day_fable: 7, seven_day_sonnet: 7, week
 function gauges(usage, limit, now) {
     const days = LIMIT_DAYS[limit];
     if (!days || usage.error || typeof usage.remaining !== 'number') return null;
-    const left = Number.isFinite(usage.reset) ? (usage.reset - (now || Date.now())) / (days * 86400000) : null;
+    const duration = Number.isFinite(usage.windowStart) && usage.reset > usage.windowStart ? usage.reset - usage.windowStart : days * 86400000;
+    const left = Number.isFinite(usage.reset) ? (usage.reset - (now ?? Date.now())) / duration : null;
     return { usage: usage.remaining / 100, time: left === null ? null : Math.max(0, Math.min(1, left)) };
 }
 function drawBar(ctx, x, y, width, height, fraction, color) {
@@ -179,11 +190,19 @@ function AiUsageWidget(context) {
 AiUsageWidget.prototype.updateSettings = function (settings) {
     this.settings = Object.assign({}, this.settings, settings || {});
     delete this.settings.helperUrl; // Ignore URLs saved by older plugin versions.
-    const url = USAGE_URL;
-    if (url !== this.url) {
+    const aliyun = this.settings.provider === 'aliyun';
+    if (aliyun) this.settings.limit = 'monthly';
+    const url = USAGE_URL + (aliyun ? '/aliyun' : '');
+    const config = aliyun ? {
+        aliyunInstanceId: String(this.settings.aliyunInstanceId || '').trim(),
+        aliyunAccessKeyId: String(this.settings.aliyunAccessKeyId || '').trim(),
+        aliyunAccessKeySecret: String(this.settings.aliyunAccessKeySecret || '').trim()
+    } : null;
+    const sourceKey = url + (config ? JSON.stringify(config) : '');
+    if (!this.source || sourceKey !== this.source.key) {
         this.detach();
         this.url = url;
-        this.source = sourceFor(url);
+        this.source = sourceFor(url, config);
         this.source.listeners.add(this);
         this.source.refresh(false);
     }
@@ -209,7 +228,7 @@ AiUsageWidget.prototype.detach = function () {
     this.source.listeners.delete(this);
     if (!this.source.listeners.size) {
         clearInterval(this.source.timer);
-        sources.delete(this.url);
+        sources.delete(this.source.key);
     }
     this.source = null;
 };
@@ -218,7 +237,8 @@ AiUsageWidget.prototype.getSnapshot = function () {
     const source = this.source;
     const selected = source && source.data ? selectUsage(source.data, this.settings) : { error: source?.error || 'Loading...' };
     const usage = selected.error ? { error: selected.error }
-        : typeof selected.amount === 'number' ? { remaining_amount: selected.amount, currency: selected.currency }
+        : typeof selected.amount === 'number' ? { remaining_amount: selected.amount, currency: selected.currency,
+            ...(Number.isFinite(selected.reset) ? { resets_at: new Date(selected.reset).toISOString() } : {}) }
         : { remaining_percent: selected.remaining, resets_at: Number.isFinite(selected.reset) ? new Date(selected.reset).toISOString() : null, reset_credits: selected.resets,
             reset_expiries: selected.resetExpiries.map(expiry => new Date(expiry).toISOString()) };
     return {
@@ -251,11 +271,11 @@ AiUsageWidget.prototype.render = function () {
         const icon = new Image();
         this.icon = icon;
         icon.onload = () => { if (this.icon === icon) this.render(); };
-        icon.src = '../resources/ai-usage/' + ({ claude: 'claude', moonshot: 'moonshot', 'moonshot-cn': 'moonshot', 'kimi-code': 'moonshot', 'opencode-go': 'opencode-go', xai: 'xai' }[provider] || 'codex') + '.svg';
+        icon.src = '../resources/ai-usage/' + ({ claude: 'claude', moonshot: 'moonshot', 'moonshot-cn': 'moonshot', 'kimi-code': 'moonshot', 'opencode-go': 'opencode-go', xai: 'xai', aliyun: 'aliyun' }[provider] || 'codex') + '.svg';
     }
     if (this.icon && this.icon.complete && this.icon.naturalWidth) ctx.drawImage(this.icon, 100, 15, 29, 29);
     ctx.textAlign = 'left'; ctx.fillStyle = '#ffffff';
-    const label = { five_hour: '5H', seven_day: '7D', seven_day_fable: 'FABLE', seven_day_sonnet: 'SONNET', balance: 'BAL', rolling: 'GO 5H', weekly: provider === 'xai' ? '7D' : 'GO 7D', monthly: provider === 'xai' || provider === 'kimi-code' ? '30D' : 'GO 30D' }[this.settings.limit || 'five_hour'] || this.settings.limit;
+    const label = { five_hour: '5H', seven_day: '7D', seven_day_fable: 'FABLE', seven_day_sonnet: 'SONNET', balance: 'BAL', rolling: 'GO 5H', weekly: provider === 'xai' ? '7D' : 'GO 7D', monthly: provider === 'aliyun' ? 'MONTH' : provider === 'xai' || provider === 'kimi-code' ? '30D' : 'GO 30D' }[this.settings.limit || 'five_hour'] || this.settings.limit;
     drawFit(ctx, this.settings.label || label, 15, 29, 20, 80);
     const display = presentation(usage, stale);
     ctx.textAlign = 'center'; ctx.fillStyle = display.color;

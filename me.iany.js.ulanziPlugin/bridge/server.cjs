@@ -1,15 +1,17 @@
 // Shared local HTTP server for all widget types. Run: node bridge/server.cjs
 const http = require('node:http');
 const { createUsageRoute } = require('./ai-usage.cjs');
+const { createAliyunUsageRoute } = require('./aliyun-usage.cjs');
 const { createOptionsStore } = require('./usage-options.cjs');
 const { createAgentsRoute } = require('./agent-status.cjs');
 const { createSoundSwitchRoutes } = require('./sound-switch.cjs');
 
-function createRoutes({ getInstances = () => [], optionsStore = createOptionsStore(), usageRoute = createUsageRoute({ optionsStore }), agentsRoute = createAgentsRoute(), soundSwitch = createSoundSwitchRoutes() } = {}) {
+function createRoutes({ getInstances = () => [], optionsStore = createOptionsStore(), usageRoute = createUsageRoute({ optionsStore }), aliyunRoute = createAliyunUsageRoute({ optionsStore }), agentsRoute = createAgentsRoute(), soundSwitch = createSoundSwitchRoutes() } = {}) {
     return new Map([
         ['/health', async () => ({ service: 'me.iany.ulanzistudio.js.bridge' })],
         ['/usage/fetch', () => ({ instances: getInstances() })],
         ['/usage', usageRoute],
+        ['/usage/aliyun', aliyunRoute],
         ['/usage/refresh', url => usageRoute(url, true)],
         ['/usage/options', () => optionsStore.read()],
         ['/usage/options/save', (url, body) => ({ ok: true, options: optionsStore.write(body) })],
@@ -24,7 +26,7 @@ function createRoutes({ getInstances = () => [], optionsStore = createOptionsSto
     ]);
 }
 
-const POST_PATHS = new Set(['/usage/refresh', '/usage/options/save', '/sound-switch/aliases/save', '/sound-switch/run']);
+const POST_PATHS = new Set(['/usage/refresh', '/usage/aliyun', '/usage/options/save', '/sound-switch/aliases/save', '/sound-switch/run']);
 
 function readBody(req, limit = 1 << 20) {
     return new Promise((resolve, reject) => {

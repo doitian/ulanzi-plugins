@@ -2,7 +2,7 @@
 const { createUsageClient } = require('./usage-providers.cjs');
 const { createProxyFetch } = require('./proxy-fetch.cjs');
 
-const ERROR_CODES = new Set(['auth_missing', 'auth_denied', 'rate_limited', 'timeout', 'invalid_response', 'credentials_changed', 'credential_write_failed', 'request_failed']);
+const ERROR_CODES = new Set(['auth_missing', 'auth_denied', 'rate_limited', 'timeout', 'invalid_response', 'credentials_changed', 'credential_write_failed', 'request_failed', 'instance_missing', 'instance_not_found']);
 function safeError(error) { return ERROR_CODES.has(error) ? error : 'request_failed'; }
 
 // Only expose usage fields, never credential material or upstream error bodies.
@@ -23,13 +23,14 @@ function sanitize(data) {
                 used_percent: typeof value.used_percent === 'number' && Number.isFinite(value.used_percent) ? value.used_percent : null,
                 remaining_amount: typeof value.remaining_amount === 'number' && Number.isFinite(value.remaining_amount) ? value.remaining_amount : null,
                 currency: ['USD', 'CNY'].includes(value.currency) ? value.currency : '',
-                resets_at: typeof value.resets_at === 'string' ? value.resets_at : null
+                resets_at: typeof value.resets_at === 'string' ? value.resets_at : null,
+                ...(typeof value.window_starts_at === 'string' && Number.isFinite(Date.parse(value.window_starts_at)) ? { window_starts_at: value.window_starts_at } : {})
             };
         }
         return result;
     }
     const providers = {};
-    for (const name of ['claude', 'codex', 'opencode-go', 'moonshot', 'moonshot-cn', 'xai', 'kimi-code']) {
+    for (const name of ['claude', 'codex', 'opencode-go', 'moonshot', 'moonshot-cn', 'xai', 'kimi-code', 'aliyun']) {
         const provider = data.providers[name];
         if (!provider || typeof provider !== 'object') continue;
         providers[name] = Array.isArray(provider.accounts)
