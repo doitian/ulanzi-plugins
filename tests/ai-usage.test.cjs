@@ -19,7 +19,7 @@ const fixture = { providers: {
     ] },
     claude: { accounts: [{ active: true, limits: { seven_day_fable: { remaining_percent: 40 } } }] }
 } };
-function runtime(fetch = async () => ({ ok: true, json: async () => ({ ...fixture, fetchedAt: Date.now() }) })) {
+function runtime(fetch = async () => ({ ok: true, json: async () => ({ ...fixture, fetchedAt: Date.now() }) }), focusBrowser) {
     const timers = new Set();
     const texts = [];
     const icons = [];
@@ -28,7 +28,7 @@ function runtime(fetch = async () => ({ ok: true, json: async () => ({ ...fixtur
     const ctx = { drawImage() {}, measureText(text) { return { width: text.length * 10 }; }, fillText(text) { texts.push(text); },
         fillRect(...args) { shapes.push(['rect', ...args]); }, arc(...args) { shapes.push(['arc', ...args]); },
         beginPath() {}, moveTo() {}, closePath() {}, fill() {} };
-    const env = { Image: class { constructor() { this.complete = true; this.naturalWidth = 24; } }, window: { ULANZI_BRIDGE_URL: 'http://127.0.0.1:23456' }, URL, AbortController, fetch, console,
+    const env = { Image: class { constructor() { this.complete = true; this.naturalWidth = 24; } }, window: { ULANZI_BRIDGE_URL: 'http://127.0.0.1:23456', ULANZI_FOCUS_BROWSER: focusBrowser }, URL, AbortController, fetch, console,
         setTimeout, clearTimeout,
         setInterval(fn) { timers.add(fn); return fn; }, clearInterval(fn) { timers.delete(fn); },
         document: { createElement() { return { getContext: () => ctx, toDataURL: () => 'data:image/png;base64,test' }; } },
@@ -140,6 +140,27 @@ test('press opens provider defaults or an override, including while offline', ()
     const count = opened.length;
     widget.destroy(); widget.handlePress(); assert.equal(opened.length, count);
 });
+test('press opens normally before requesting native focus, and focus failure is harmless', async () => {
+    const events = [];
+    const { Widget, opened } = runtime(undefined, async url => {
+        assert.equal(opened.at(-1), url);
+        events.push(url);
+        throw new Error('Focus denied');
+    });
+    const widget = new Widget('key');
+    widget.settings = { url: '  https://example.com/usage  ' };
+    widget.handlePress();
+    assert.equal(opened.length, 1);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(events, ['https://example.com/usage']);
+    widget.handlePress();
+    widget.destroy();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(events.length, 1);
+    widget.handlePress();
+    assert.equal(opened.length, 2);
+});
+
 test('saved helper URLs cannot override the runtime endpoint', async () => {
     const urls = [];
     const { Widget } = runtime(async url => {

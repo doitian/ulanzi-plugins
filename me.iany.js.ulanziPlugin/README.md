@@ -73,8 +73,13 @@ inspectors remain HTML.
    usage window, and optionally a custom label.
 
 Set **Press URL** to override the page opened by that key; leave it blank for
-the provider default (the `url` setting). Presses work even when usage is offline
-and also request a forced usage refresh. Refreshes share the existing
+the provider default (the `url` setting). On Windows, when Edge is the default
+browser for that URL, the plugin also restores and focuses the most recently
+raised Edge window after opening the page. This is best-effort: Windows focus
+restrictions, multiple browser windows/profiles, or disabled PowerShell can
+prevent the intended window from receiving focus. Other browsers and the HTML
+preview retain the host's normal URL-opening behavior.
+Presses work even when usage is offline and also request a forced usage refresh. Refreshes share the existing
 90-second throttle and any in-flight request across all keys. Defaults follow ulanzi-studio-niri:
 
 | Provider | Default press URL |

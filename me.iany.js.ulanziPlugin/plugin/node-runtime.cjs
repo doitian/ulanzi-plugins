@@ -3,6 +3,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { createCanvas, Image, GlobalFonts } = require('@napi-rs/canvas');
 const WebSocket = require('ws');
+const { createBrowserFocus } = require('./browser-focus.cjs');
 
 // Segoe UI lacks CJK glyphs; make Microsoft YaHei explicit for the widget font stack.
 try { GlobalFonts.registerFromPath(path.join(process.env.SystemRoot || 'C:\\Windows', 'Fonts', 'msyh.ttc'), 'Microsoft YaHei'); } catch (_) {}
@@ -13,7 +14,9 @@ function loadWidgets(api, bridgeUrl) {
         set src(value) { super.src = fs.readFileSync(path.resolve(__dirname, value)); }
     }
     const timers = new Set();
+    const browserFocus = createBrowserFocus();
     const environment = {
+        ULANZI_FOCUS_BROWSER: browserFocus.focus,
         ULANZI_BRIDGE_URL: bridgeUrl, $UD: api, WebSocket, Image: LocalImage, fetch, URL, AbortController, console,
         setTimeout(fn, ms) { const timer = setTimeout(() => { timers.delete(timer); fn(); }, ms); timers.add(timer); return timer; },
         clearTimeout(timer) { clearTimeout(timer); timers.delete(timer); },
@@ -32,6 +35,7 @@ function loadWidgets(api, bridgeUrl) {
     return {
         getInstances: () => vm.runInContext('getAiUsageInstances()', context),
         dispose() {
+            browserFocus.dispose();
             vm.runInContext('forEachInstance(instance => instance.destroy())', context);
             for (const timer of timers) clearTimeout(timer);
             timers.clear();

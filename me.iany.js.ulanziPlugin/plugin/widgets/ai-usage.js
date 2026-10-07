@@ -221,7 +221,14 @@ AiUsageWidget.prototype.handlePress = function () {
     if (this.destroyed) return;
     if (this.source) this.source.refresh(true);
     const target = (this.settings.url || '').trim() || PROVIDER_URLS[this.settings.provider || 'codex'];
-    if (target) $UD.openUrl(target, false, null, this.context);
+    if (target) {
+        $UD.openUrl(target, false, null, this.context);
+        if (typeof window.ULANZI_FOCUS_BROWSER === 'function') {
+            Promise.resolve().then(() => {
+                if (!this.destroyed) return window.ULANZI_FOCUS_BROWSER(target);
+            }).catch(() => {});
+        }
+    }
 };
 AiUsageWidget.prototype.detach = function () {
     if (!this.source) return;
