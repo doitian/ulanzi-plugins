@@ -19,14 +19,14 @@ pushed.
 
 """
 body = """
-{% if version %}## {{ version | trim_start_matches(pat="v") }} - {{ timestamp | date(format="%Y-%m-%d") }}{% else %}## Unreleased{% endif %}
+{% if version %}## {{ version | trim_start_matches(pat="v") }} - {{ timestamp | date(format="%Y-%m-%d") }}{% if previous.version %} ([Full Changelog](https://github.com/doitian/ulanzi-plugins/compare/{{ previous.version }}...{{ version }})){% endif %}{% else %}## Unreleased{% endif %}
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group }}
 {% for commit in commits %}
 - {{ commit.message | split(pat="\n") | first | trim }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/doitian/ulanzi-plugins/commit/{{ commit.id }}))
 {%- endfor %}
 {% endfor %}
-{% if version and previous.version %}**Full Changelog**: https://github.com/doitian/ulanzi-plugins/compare/{{ previous.version }}...{{ version }}{% endif %}
+
 """
 trim = true
 

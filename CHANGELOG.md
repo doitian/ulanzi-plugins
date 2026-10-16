@@ -13,6 +13,7 @@ pushed.
 ### Miscellaneous
 
 - keep an auto generated changelog for each release ([c683394](https://github.com/doitian/ulanzi-plugins/commit/c683394e318bd4f2265fad62d1ce84a3c71426aa))
+- avoid the github api when generating changelog links ([b212957](https://github.com/doitian/ulanzi-plugins/commit/b212957922bf731f9a7580f57fdc2f7046646d8d))
 
 ## 1.0.0 - 2026-10-16
 
