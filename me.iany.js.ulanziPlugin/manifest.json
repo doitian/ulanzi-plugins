@@ -3,7 +3,7 @@
   "Name": "iany's JS Widgets",
   "Description": "A collection of JavaScript widgets for Ulanzi Deck.",
   "Icon": "resources/icon.svg",
-  "Version": "1.0.0",
+  "Version": "1.0.1",
   "Category": "iany's JS Widgets",
   "CategoryIcon": "resources/icon.svg",
   "CodePath": "plugin/main.js",
