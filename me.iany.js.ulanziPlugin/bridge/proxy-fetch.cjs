@@ -4,9 +4,23 @@
 const http = require('node:http');
 const https = require('node:https');
 const tls = require('node:tls');
-const { Readable } = require('node:stream');
 
 const NULL_BODY_STATUS = new Set([101, 204, 205, 304]);
+
+// Not Readable.toWeb: on Node 20.12 (bundled with Ulanzi Studio) cancelling its
+// stream between the response's 'end' and 'close' events, as callers do with
+// small non-OK bodies, throws an uncaught ERR_INVALID_STATE that kills the plugin.
+function responseBody(response) {
+    const chunks = response[Symbol.asyncIterator]();
+    return new ReadableStream({
+        async pull(controller) {
+            const { value, done } = await chunks.next();
+            if (done) controller.close();
+            else controller.enqueue(new Uint8Array(value));
+        },
+        cancel() { response.destroy(); }
+    });
+}
 
 function normalizeProxy(value) {
     const proxy = (typeof value === 'string' ? value : '').trim();
@@ -55,7 +69,7 @@ function requestOverSocket(socket, target, options) {
         request.on('response', response => {
             const headers = new Headers();
             for (let i = 0; i < response.rawHeaders.length; i += 2) headers.append(response.rawHeaders[i], response.rawHeaders[i + 1]);
-            resolve(new Response(NULL_BODY_STATUS.has(response.statusCode) ? null : Readable.toWeb(response), {
+            resolve(new Response(NULL_BODY_STATUS.has(response.statusCode) ? null : responseBody(response), {
                 status: response.statusCode, statusText: response.statusMessage, headers
             }));
         });

@@ -7,6 +7,7 @@ const { createUsageRoute, sanitize } = require('../me.iany.js.ulanziPlugin/bridg
 const { sanitizeOptions } = require('../me.iany.js.ulanziPlugin/bridge/usage-options.cjs');
 const { createProxyFetch } = require('../me.iany.js.ulanziPlugin/bridge/proxy-fetch.cjs');
 const http = require('node:http');
+const net = require('node:net');
 const { createServer, createRoutes } = require('../me.iany.js.ulanziPlugin/bridge/server.cjs');
 const root = path.join(__dirname, '../me.iany.js.ulanziPlugin');
 const fixture = { providers: {
@@ -73,6 +74,15 @@ test('keys share fetches, retain stale readings, skip inactive renders and relea
     assert.equal(icons.filter(x => x === 'b').length, before);
     a.destroy(); assert.equal(timers.size, 1);
     b.destroy(); assert.equal(timers.size, 0);
+});
+test('a helper that fails before any reading shows an error instead of missing data', async t => {
+    const { Widget, texts } = runtime(async () => { throw new Error('offline'); });
+    const widget = new Widget('offline-key');
+    t.after(() => widget.destroy());
+    widget.updateSettings({});
+    assert.deepEqual(texts.splice(0), ['5H', 'n/a', '']);
+    await widget.source.pending;
+    assert.deepEqual(texts.splice(0), ['5H', 'Err', '', 'stale']);
 });
 
 test('instance snapshots select configured usage and retain stale data without fetching', async t => {
@@ -333,6 +343,44 @@ test('proxy credentials are sent as basic proxy authorization', async t => {
     const proxyFetch = createProxyFetch({ optionsStore: { read: () => stored }, fetchImpl: async () => ({ ok: true }) });
     await assert.rejects(proxyFetch('https://api.example.com/usage'));
     assert.equal(authorization, 'Basic ' + Buffer.from('user:pass').toString('base64'));
+});
+test('proxied response bodies can be cancelled after they end without crashing the process', async t => {
+    const upstream = http.createServer((req, res) => {
+        if (req.url === '/limited') res.writeHead(429).end('{"error":"rate_limited"}');
+        else res.writeHead(200).end(JSON.stringify({ ok: true, pad: 'x'.repeat(100000) }));
+    });
+    const proxy = http.createServer();
+    proxy.on('connect', (req, socket) => {
+        const out = net.connect(upstream.address().port, '127.0.0.1', () => {
+            socket.write('HTTP/1.1 200 Connection Established\r\n\r\n');
+            out.pipe(socket).pipe(out);
+        });
+        out.on('error', () => socket.destroy());
+        socket.on('error', () => out.destroy());
+    });
+    await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve));
+    await new Promise(resolve => proxy.listen(0, '127.0.0.1', resolve));
+    t.after(() => {
+        upstream.close(); upstream.closeAllConnections();
+        proxy.close(); proxy.closeAllConnections();
+    });
+    const uncaught = [];
+    const onUncaught = error => uncaught.push(error);
+    process.on('uncaughtException', onUncaught);
+    t.after(() => process.off('uncaughtException', onUncaught));
+    // The tunnel stays plaintext; only the stream handling is under test.
+    const tlsConnect = ({ socket }) => { process.nextTick(() => socket.emit('secureConnect')); return socket; };
+    const proxyFetch = createProxyFetch({ optionsStore: { read: () => ({ proxy: 'http://127.0.0.1:' + proxy.address().port }) }, tlsConnect });
+    for (let i = 0; i < 10; i++) {
+        const response = await proxyFetch('https://api.example.com/limited');
+        assert.equal(response.status, 429);
+        await response.body.cancel();
+    }
+    const data = await (await proxyFetch('https://api.example.com/usage')).json();
+    assert.equal(data.ok, true);
+    assert.equal(data.pad.length, 100000);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    assert.deepEqual(uncaught.map(error => error.code), []);
 });
 test('usage options round-trip through the shared bridge routes', async t => {
     let stored = { proxy: '' };

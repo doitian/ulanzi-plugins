@@ -267,7 +267,7 @@ AiUsageWidget.prototype.getSnapshot = function () {
 AiUsageWidget.prototype.render = function () {
     if (this.destroyed || !this.active) return;
     const source = this.source;
-    const usage = source && source.data ? selectUsage(source.data, this.settings) : { error: 'Loading...' };
+    const usage = source && source.data ? selectUsage(source.data, this.settings) : { error: source?.error || 'Loading...' };
     const stale = source && (source.error || (source.data && Date.now() - source.data.fetchedAt > 35 * 60000));
     const ctx = this.ctx;
     ctx.fillStyle = '#000000'; ctx.fillRect(0, 0, 144, 144);
