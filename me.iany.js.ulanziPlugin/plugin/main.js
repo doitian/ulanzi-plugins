@@ -1,4 +1,8 @@
 // Ulanzi launches this Node entry point and owns this process's lifetime.
+const { installUncaughtGuard } = require('./uncaught-errors.cjs');
+
+installUncaughtGuard();
+
 const { createServer, createRoutes } = require('../bridge/server.cjs');
 const { loadWidgets } = require('./node-runtime.cjs');
 

@@ -13,7 +13,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Match the Node bundled with Ulanzi Studio; newer 20.x fixed the
+          # Readable.toWeb teardown bug the proxy-fetch regression test guards.
+          node-version: 20.12.2
 
       - name: Install dependencies
         working-directory: me.iany.js.ulanziPlugin

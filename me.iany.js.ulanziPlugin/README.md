@@ -226,6 +226,9 @@ If you see **Helper offline**, restart Ulanzi Studio to relaunch the shared serv
 **CLI login required** or **Login expired** means you should sign in again using
 the provider CLI, then wait for the next refresh or restart Ulanzi Studio. **No limit data** means that
 window was not returned for the selected plan.
+The shared service also ignores Node 20.12.2's `Readable.toWeb` teardown error
+(`ERR_INVALID_STATE: Controller is already closed`), so one cancelled response body
+cannot take every key down; any other unexpected error still stops the service.
 
 Run automated widget, local-helper, and direct-API fixture tests with
 `node --test tests/*.test.cjs` from the
