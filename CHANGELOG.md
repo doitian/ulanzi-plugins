@@ -10,6 +10,10 @@ pushed.
 
 - add repo readme covering widgets, install, development, and releases ([add1314](https://github.com/doitian/ulanzi-plugins/commit/add1314f7dddbfdf0ad50f717ffae4da1bdb2eaf))
 
+### Miscellaneous
+
+- keep an auto generated changelog for each release ([c683394](https://github.com/doitian/ulanzi-plugins/commit/c683394e318bd4f2265fad62d1ce84a3c71426aa))
+
 ## 1.0.0 - 2026-10-16
 
 ### Changes

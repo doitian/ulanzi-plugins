@@ -4,6 +4,10 @@
 # occasional Conventional Commit ("fix: ..."). Conventional parsing is left on so
 # those prefixes are stripped from the rendered entries, while the groups below are
 # keyed off the leading verb rather than the commit type.
+#
+# The repository slug is written out in the template rather than configured under
+# [remote.github]: that section makes git-cliff fetch commit metadata over the
+# GitHub API, which rate-limits and then panics even though no API field is used.
 
 [changelog]
 header = """
@@ -19,10 +23,10 @@ body = """
 {% for group, commits in commits | group_by(attribute="group") %}
 ### {{ group }}
 {% for commit in commits %}
-- {{ commit.message | split(pat="\n") | first | trim }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }}))
+- {{ commit.message | split(pat="\n") | first | trim }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/doitian/ulanzi-plugins/commit/{{ commit.id }}))
 {%- endfor %}
 {% endfor %}
-{% if version and previous.version %}**Full Changelog**: https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/compare/{{ previous.version }}...{{ version }}{% endif %}
+{% if version and previous.version %}**Full Changelog**: https://github.com/doitian/ulanzi-plugins/compare/{{ previous.version }}...{{ version }}{% endif %}
 """
 trim = true
 
@@ -42,7 +46,3 @@ commit_parsers = [
   { message = "^remove|^drop|^delete", group = "Removals" },
   { message = ".*", group = "Miscellaneous" },
 ]
-
-[remote.github]
-owner = "doitian"
-repo = "ulanzi-plugins"
