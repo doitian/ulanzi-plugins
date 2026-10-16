@@ -1,2 +1,4 @@
 node_modules/
 /.claude/skills
+.DS_Store
+*.ulanziPlugin.zip

@@ -1,0 +1,56 @@
+name: release-plugin
+
+# Publishes a GitHub Release when a version tag (e.g. v1.0.1) is pushed. The
+# tag is the source of truth; it must match the plugin manifest's Version.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: meta
+        run: |
+          dir=$(ls -d *.ulanziPlugin 2>/dev/null | head -1)
+          if [ -z "$dir" ]; then echo "No .ulanziPlugin folder at the repository root" >&2; exit 1; fi
+          manifest_version=$(jq -r .Version "$dir/manifest.json")
+          version="${GITHUB_REF_NAME#v}"
+          if [ "$version" != "$manifest_version" ]; then
+            echo "Release version '$version' does not match manifest Version '$manifest_version'" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build plugin zip(s)
+        run: |
+          found=0
+          for dir in *.ulanziPlugin; do
+            [ -d "$dir" ] || continue
+            echo "Packaging $dir"
+            zip -r "${dir}.zip" "$dir" -x "*.DS_Store"
+            found=1
+          done
+          if [ "$found" = "0" ]; then
+            echo "No .ulanziPlugin directory found at the repository root" >&2
+            exit 1
+          fi
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          gh release create "v$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "v$VERSION" \
+            --generate-notes \
+            --latest \
+            *.ulanziPlugin.zip
