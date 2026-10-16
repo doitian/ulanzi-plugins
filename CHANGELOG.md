@@ -4,16 +4,21 @@ Notable changes are recorded here, newest first. Each section is generated from
 the commit history by [git-cliff](https://git-cliff.org) when a version tag is
 pushed.
 
-## Unreleased
+## 1.0.1 - 2026-10-16 ([Full Changelog](https://github.com/doitian/ulanzi-plugins/compare/v1.0.0...v1.0.1))
 
 ### Features
 
 - add repo readme covering widgets, install, development, and releases ([add1314](https://github.com/doitian/ulanzi-plugins/commit/add1314f7dddbfdf0ad50f717ffae4da1bdb2eaf))
 
+### Fixes
+
+- fix changelog section separation when a compare link is present ([da15705](https://github.com/doitian/ulanzi-plugins/commit/da15705c618a32c889a7646c750fd6af053b58bf))
+
 ### Miscellaneous
 
 - keep an auto generated changelog for each release ([c683394](https://github.com/doitian/ulanzi-plugins/commit/c683394e318bd4f2265fad62d1ce84a3c71426aa))
 - avoid the github api when generating changelog links ([b212957](https://github.com/doitian/ulanzi-plugins/commit/b212957922bf731f9a7580f57fdc2f7046646d8d))
+- bump the plugin to 1.0.1 ([764bb6e](https://github.com/doitian/ulanzi-plugins/commit/764bb6efdc3bf0504894c5f6405e4b260dac80d9))
 
 ## 1.0.0 - 2026-10-16
 
