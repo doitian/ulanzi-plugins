@@ -14,7 +14,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+      # Full history and tags: git-cliff builds changelog sections from them.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Resolve release version
         id: meta
@@ -29,6 +33,8 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      # Built before the branch switch below so the artifact matches the tag,
+      # not whatever the default branch has moved on to.
       - name: Build plugin zip(s)
         run: |
           found=0
@@ -43,6 +49,53 @@ jobs:
             exit 1
           fi
 
+      # CHANGELOG.md lives on the default branch, so generate and commit it
+      # there rather than on the detached tag checkout.
+      - name: Check out the default branch
+        env:
+          BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git fetch --no-tags origin "$BRANCH"
+          git checkout -B "$BRANCH" FETCH_HEAD
+
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@v4
+        id: notes
+        with:
+          version: 'v2.14.2'
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: .release-notes.md
+
+      - name: Update CHANGELOG.md
+        uses: orhun/git-cliff-action@v4
+        with:
+          version: 'v2.14.2'
+          config: cliff.toml
+          args: --verbose
+        env:
+          OUTPUT: CHANGELOG.md
+
+      - name: Commit CHANGELOG.md
+        env:
+          BRANCH: ${{ github.event.repository.default_branch }}
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          # git-cliff carries the last section's blank separator through to EOF;
+          # the repository's pre-commit hook rejects a trailing blank line.
+          printf '%s\n' "$(cat CHANGELOG.md)" > CHANGELOG.md.tmp
+          mv CHANGELOG.md.tmp CHANGELOG.md
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add CHANGELOG.md
+          if git diff --cached --quiet; then
+            echo "CHANGELOG.md is already up to date"
+          else
+            git commit -m "update changelog for v$VERSION"
+            git push origin "$BRANCH"
+          fi
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -51,6 +104,6 @@ jobs:
           gh release create "v$VERSION" \
             --repo "$GITHUB_REPOSITORY" \
             --title "v$VERSION" \
-            --generate-notes \
+            --notes-file .release-notes.md \
             --latest \
             *.ulanziPlugin.zip

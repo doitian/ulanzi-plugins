@@ -58,7 +58,9 @@ git tag v1.0.1 && git push origin v1.0.1
 
 The tag must match the `Version` in `me.iany.js.ulanziPlugin/manifest.json`, so
 bump the manifest first and tag that same commit; the workflow fails if they
-disagree.
+disagree. Both the release body and [`CHANGELOG.md`](CHANGELOG.md) are generated
+from the commit history by [git-cliff](https://git-cliff.org) using `cliff.toml`,
+and the workflow commits the changelog back to `main`.
 
 ## Layout
 
@@ -68,3 +70,4 @@ disagree.
 | `scripts/` | Install helper and proxy check |
 | `tests/` | Node test-runner suites |
 | `.github/workflows/` | `test.yml` (tests on `main` and pull requests), `release.yml` (release on version tags) |
+| `cliff.toml` | git-cliff configuration for the generated changelog |

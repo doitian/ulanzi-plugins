@@ -1,0 +1,48 @@
+# Changelog generation, run by .github/workflows/release.yml on every version tag.
+#
+# Commit subjects here mix informal imperatives ("add ...", "update ...") with the
+# occasional Conventional Commit ("fix: ..."). Conventional parsing is left on so
+# those prefixes are stripped from the rendered entries, while the groups below are
+# keyed off the leading verb rather than the commit type.
+
+[changelog]
+header = """
+# Changelog
+
+Notable changes are recorded here, newest first. Each section is generated from
+the commit history by [git-cliff](https://git-cliff.org) when a version tag is
+pushed.
+
+"""
+body = """
+{% if version %}## {{ version | trim_start_matches(pat="v") }} - {{ timestamp | date(format="%Y-%m-%d") }}{% else %}## Unreleased{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group }}
+{% for commit in commits %}
+- {{ commit.message | split(pat="\n") | first | trim }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/commit/{{ commit.id }}))
+{%- endfor %}
+{% endfor %}
+{% if version and previous.version %}**Full Changelog**: https://github.com/{{ remote.github.owner }}/{{ remote.github.repo }}/compare/{{ previous.version }}...{{ version }}{% endif %}
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+tag_pattern = "v[0-9]*"
+sort_commits = "oldest"
+commit_parsers = [
+  # The release workflow commits the changelog itself; keep those out of it.
+  { message = "^update changelog", skip = true },
+  { message = "^feat|^add", group = "Features" },
+  { message = "^fix|^harden", group = "Fixes" },
+  { message = "^update|^change|^rename", group = "Changes" },
+  { message = "^refactor|^organize", group = "Refactoring" },
+  { message = "^doc|^readme", group = "Documentation" },
+  { message = "^remove|^drop|^delete", group = "Removals" },
+  { message = ".*", group = "Miscellaneous" },
+]
+
+[remote.github]
+owner = "doitian"
+repo = "ulanzi-plugins"
