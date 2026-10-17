@@ -74,7 +74,7 @@ For Encoder actions add `Encoder: { layout: "$UA1" }` (icon+text) or `"$UA2"` (t
 
 ## 4. Main Service — Node entry (`plugin/main.js`)
 
-`main.js` is CommonJS and dynamically imports the ESM SDK. It owns the process lifetime: start the bridge **before** accepting widget events, and tear everything down when Ulanzi disconnects.
+`main.js` is CommonJS and dynamically imports the ESM SDK. It owns the process lifetime: start the bridge **before** accepting widget events, and tear everything down on SIGINT/SIGTERM. A dropped host socket is **not** fatal — the host never relaunches a dead plugin process, so `main.js` reconnects with exponential backoff and gives up only when the host stays unreachable (Studio quit) or keeps closing fresh connections (a replacement process took over). Lifecycle events and fatal errors go to a persistent `service.log` next to the plugin data dir.
 
 ```js
 const { createServer, createRoutes } = require('../bridge/server.cjs');
@@ -91,7 +91,7 @@ async function main() {
     });
     const bridgeUrl = 'http://127.0.0.1:' + server.address().port;
     console.info('Widget bridge listening on ' + bridgeUrl);
-    api.onClose(stop);
+    api.onClose(scheduleReconnect);   // bounded backoff; exit only when the host stays gone
     api.onError(() => {});   // the SDK emits EventEmitter's special error event
     process.once('SIGINT', stop);
     process.once('SIGTERM', stop);
@@ -299,6 +299,8 @@ Place `{lang}.json` in the plugin root. Supported: `en`, `zh_CN`, `zh_HK`, `ja_J
 In PI HTML use `data-localize` (translates `textContent`, `placeholder`, `title`, `label`); the SDK runs it on `.uspi-wrapper` after connect. In JS use `$UD.t('key')`.
 
 ## 12. Long-Running Connections
+
+The main-service socket reconnects with backoff in `main.js` — never exit just because the host closed the connection; the host does not relaunch dead plugin processes.
 
 Exponential backoff plus a staleness watchdog — `readyState` lags a silently dropped TCP connection (host restarts, sleep/resume):
 

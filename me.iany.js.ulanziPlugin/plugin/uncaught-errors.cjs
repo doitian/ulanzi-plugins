@@ -14,12 +14,17 @@ function isWebstreamTeardownError(error) {
     return String(error.stack || '').includes(WEBSTREAM_ADAPTER);
 }
 
-function installUncaughtGuard({ process: proc = process, report = error => console.error(error), exit = code => proc.exit(code) } = {}) {
-    proc.on('uncaughtException', error => {
+function installUncaughtGuard({ process: proc = process, report = error => console.error(error), exit = code => proc.exit(code), log = null } = {}) {
+    const handle = kind => error => {
         if (isWebstreamTeardownError(error)) return;
         report(error);
+        // Persist the reason: the host never relaunches a dead plugin process,
+        // so every silent death strands the widgets until Studio restarts.
+        if (log) log(kind, error && (error.stack || error.message || String(error)));
         exit(1);
-    });
+    };
+    proc.on('uncaughtException', handle('uncaughtException'));
+    proc.on('unhandledRejection', handle('unhandledRejection'));
 }
 
 module.exports = { installUncaughtGuard, isWebstreamTeardownError };

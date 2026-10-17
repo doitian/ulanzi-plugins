@@ -42,6 +42,24 @@ test('installed guard ignores the teardown error, reports and exits on anything 
     assert.deepEqual(exited, [1]);
 });
 
+test('the guard covers unhandled rejections and logs the exit reason', () => {
+    const proc = new EventEmitter();
+    const reported = [];
+    const exited = [];
+    const logged = [];
+    proc.exit = code => { exited.push(code); };
+    installUncaughtGuard({ process: proc, report: error => reported.push(error.message), exit: proc.exit, log: (kind, detail) => logged.push([kind, detail]) });
+    proc.emit('unhandledRejection', teardownError());
+    assert.deepEqual(reported, []);
+    assert.deepEqual(exited, []);
+    proc.emit('unhandledRejection', new Error('kaput'));
+    assert.deepEqual(reported, ['kaput']);
+    assert.deepEqual(exited, [1]);
+    assert.equal(logged.length, 1);
+    assert.equal(logged[0][0], 'unhandledRejection');
+    assert.match(logged[0][1], /kaput/);
+});
+
 test('a process using the guard survives the teardown error but dies on other errors', async () => {
     const swallow = `
         const { installUncaughtGuard } = require(${JSON.stringify(plugin)});

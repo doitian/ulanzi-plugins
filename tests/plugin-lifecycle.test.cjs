@@ -1,6 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const net = require('node:net');
+const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { WebSocketServer } = require('../me.iany.js.ulanziPlugin/node_modules/ws');
@@ -22,10 +23,12 @@ test('Ulanzi launch starts the bridge, renders widgets, and exits with the host'
             ULANZI_GROK_CREDENTIALS: path.join(__dirname, 'missing-auth.json'),
             MOONSHOT_API_KEY: '', MOONSHOT_CN_API_KEY: '', OPENCODE_GO_API_KEY: '',
             ULANZI_AGENT_BERTH: path.join(__dirname, 'missing-agent-berth'),
-            ULANZI_USAGE_OPTIONS: path.join(__dirname, 'missing-usage-options.json')
+            ULANZI_USAGE_OPTIONS: path.join(__dirname, 'missing-usage-options.json'),
+            ULANZI_SERVICE_LOG: path.join(os.tmpdir(), 'ulanzi-lifecycle-service.log'),
+            ULANZI_RECONNECT_GIVEUP_MS: '1000'
         }, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore']
     });
-    t.after(() => { child.kill(); for (const client of host.clients) client.terminate(); host.close(); });
+    t.after(() => { child.kill(); for (const client of host.clients) client.terminate(); try { host.close(); } catch (_) {} });
     const allocatedPort = new Promise(resolve => {
         let output = '';
         child.stdout.on('data', chunk => {
@@ -35,7 +38,7 @@ test('Ulanzi launch starts the bridge, renders widgets, and exits with the host'
         });
     });
     const exited = new Promise(resolve => child.once('exit', (code) => resolve(code)));
-    const timeout = setTimeout(() => child.kill(), 10000);
+    const timeout = setTimeout(() => child.kill(), 15000);
     t.after(() => clearTimeout(timeout));
     const rendered = new Set();
     const icons = new Promise(resolve => host.on('connection', socket => socket.on('message', raw => {
@@ -96,7 +99,14 @@ test('Ulanzi launch starts the bridge, renders widgets, and exits with the host'
     assert.equal(cleared[0].context, initial[0].context);
     socket.send(JSON.stringify({ cmd: 'clear', param: [{ uuid: 'me.iany.ulanzistudio.js.aiUsage', key: 'aiUsage', actionid: 'test' }] }));
     await waitForInstances(rows => rows.length === 0);
+    // A dropped host socket must trigger a reconnect, not an exit: the host
+    // never relaunches a dead plugin process.
+    const reconnected = new Promise(resolve => host.once('connection', resolve));
     socket.close();
+    await Promise.race([reconnected, exited.then(code => { throw new Error('Plugin exited instead of reconnecting: ' + code); })]);
+    // When the host stays unreachable the service gives up and exits cleanly.
+    for (const client of host.clients) client.terminate();
+    host.close();
     assert.equal(await exited, 0);
     await assert.rejects(fetch('http://127.0.0.1:' + bridgePort + '/health'));
 });
