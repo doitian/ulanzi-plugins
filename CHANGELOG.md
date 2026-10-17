@@ -4,6 +4,16 @@ Notable changes are recorded here, newest first. Each section is generated from
 the commit history by [git-cliff](https://git-cliff.org) when a version tag is
 pushed.
 
+## 1.0.2 - 2026-10-17 ([Full Changelog](https://github.com/doitian/ulanzi-plugins/compare/v1.0.1...v1.0.2))
+
+### Fixes
+
+- reconnect the host socket instead of exiting on close ([de3298e](https://github.com/doitian/ulanzi-plugins/commit/de3298e8ced4d45fd1e6e3e16b71f437b0159ad1))
+
+### Miscellaneous
+
+- bump the plugin to 1.0.2 ([0392244](https://github.com/doitian/ulanzi-plugins/commit/039224465374854c51c9278282aeb9ec0a2da6f1))
+
 ## 1.0.1 - 2026-10-16 ([Full Changelog](https://github.com/doitian/ulanzi-plugins/compare/v1.0.0...v1.0.1))
 
 ### Features
